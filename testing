@@ -1,380 +1,683 @@
 --[[
-Nihility Hub Dungeon Quest - Clean Delta-Safe Rebuild v18
+MiniRayfield Local Shim
 
-Purpose:
-- safer clean source package after successful v17 log
-- interactive local UI, config/log export, payload builders
-- original VM/key system/webhooks/Vercel/Rayfield/queue_on_teleport removed
-- game remotes remain stubs only
+Goal:
+- Replace the external Rayfield loadstring dependency.
+- Keep the same basic Rayfield-style API used by the reconstructed Type Or Die script.
+- Preserve a similar dark, rounded, tabbed look and notification feel.
 
-This does NOT run the original obfuscated DQ payload.
-This does NOT send HTTP/webhooks.
-This does NOT FireServer/InvokeServer.
+How to use in your script:
+1. Paste this whole file above your rebuilt Type Or Die logic.
+2. Replace this old line:
 
-Original source SHA-256:
-9dd02526bb114b9a3496b541712705652dd1e51645a116de265d35e918b5856b
+   local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+   with this:
+
+   local Rayfield = CreateLocalRayfield()
+
+Supported API used by the rebuild:
+- Rayfield:CreateWindow({...})
+- Window:CreateTab(Name, Icon)
+- Tab:CreateParagraph({Title = "...", Content = "..."})
+- Tab:CreateInput({Name = "...", PlaceholderText = "...", RemoveTextAfterFocusLost = true, Callback = function(Text) end})
+- Tab:CreateToggle({Name = "...", CurrentValue = false, Callback = function(Value) end})
+- Rayfield:Notify({Title = "...", Content = "...", Duration = 5})
 ]]
 
-local Hub = {}
-Hub.Version = "v18-delta-safe-clean"
+local function CreateLocalRayfield()
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local UserInputService = game:GetService("UserInputService")
 
-Hub.SecurityPolicy = {
-    AllowOriginalVM = false,
-    AllowKeySystem = false,
-    AllowExternalHttp = false,
-    AllowDiscordWebhook = false,
-    AllowDashboardTelemetry = false,
-    AllowQueueOnTeleport = false,
-    AllowExternalUILoad = false,
-    AllowGameRemotes = false,
-    DryRun = true,
-}
+    local LocalPlayer = Players.LocalPlayer
 
-Hub.StaticEvidence = {
-    SourceSha256 = "9dd02526bb114b9a3496b541712705652dd1e51645a116de265d35e918b5856b",
-    V17LogEvents = 44,
-    RecoveredActionSymbols = {
-        ["CreateParty"] = { cluster = "party_carry", evidenceRows = 5, v17StubHits = 1, locations = "p70:pc115, p70:pc130, p70:pc166, p116:pc5, p116:pc10" },
-        ["GetPlayerParty"] = { cluster = "party_carry", evidenceRows = 2, v17StubHits = 0, locations = "p70:pc151, p70:pc155" },
-        ["HandleEnemy"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 2, locations = "" },
-        ["HandleJoinRequest"] = { cluster = "party_carry", evidenceRows = 3, v17StubHits = 1, locations = "p72:pc44, p103:pc36, p103:pc38" },
-        ["JoinParty"] = { cluster = "party_carry", evidenceRows = 2, v17StubHits = 0, locations = "p92:pc10, p108:pc17" },
-        ["KickMember"] = { cluster = "party_carry", evidenceRows = 5, v17StubHits = 1, locations = "p101:pc4, p104:pc4, p105:pc4, p106:pc4, p108:pc4" },
-        ["PlaySolo"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 1, locations = "" },
-        ["Weapon"] = { cluster = "combat_killaura_skills", evidenceRows = 5, v17StubHits = 0, locations = "p97:pc557, p129:pc32, p131:pc45, p131:pc301, p132:pc45" },
-        ["Weapon.Attack"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 2, locations = "" },
-        ["abilityEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, v17StubHits = 1, locations = "p81:pc17" },
-        ["localEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, v17StubHits = 1, locations = "p81:pc17" },
-        ["reloadInvy"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 1, locations = "" },
-        ["spellEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, v17StubHits = 1, locations = "p81:pc16" },
-        ["vote"] = { cluster = "dungeon_join_retry", evidenceRows = 11, v17StubHits = 1, locations = "p55:pc33, p77:pc7, p131:pc7, p131:pc519, p145:pc7, p146:pc1287, p146:pc1799, p152:pc7" },
-    },
-}
+    local Colors = {
+        Background = Color3.fromRGB(21, 23, 31),
+        Panel = Color3.fromRGB(29, 32, 43),
+        Panel2 = Color3.fromRGB(35, 39, 52),
+        Panel3 = Color3.fromRGB(43, 48, 64),
+        Stroke = Color3.fromRGB(70, 78, 104),
+        Accent = Color3.fromRGB(116, 128, 255),
+        Accent2 = Color3.fromRGB(92, 199, 255),
+        Text = Color3.fromRGB(238, 242, 255),
+        Muted = Color3.fromRGB(170, 178, 204),
+        DarkText = Color3.fromRGB(90, 96, 120),
+        Success = Color3.fromRGB(75, 220, 140),
+        Warning = Color3.fromRGB(255, 205, 100),
+    }
 
-Hub.Config = {
-    ConfigFolder = "Nihility Hub/Dungeon Quest Clean/",
-    ConfigName = "default",
+    local Font = Enum.Font.Gotham
+    local BoldFont = Enum.Font.GothamBold
+    local SemiboldFont = Enum.Font.GothamSemibold
 
-    AutoFarm = false,
-    Killaura = false,
-    AutoSell = false,
-    AutoRetry = false,
-    AutoJoin = false,
-    AutoCarry = false,
-    AutoJoinHighest = false,
-    AutoUpgradeStat = false,
-    AutoBonusBoss = false,
+    local Rayfield = {}
+    Rayfield.Flags = {}
 
-    SelectedDungeon = "DRY_RUN_DUNGEON",
-    SelectedDifficulty = "DRY_RUN_DIFFICULTY",
-    SelectedStat = "Physical Power",
-
-    WalkSpeed = 16,
-    DisableSkillEffects = false,
-    DisableMap = false,
-    StatsOnlyScreen = false,
-    HideUserInfo = false,
-
-    UserWebhookUrl = "",
-    SendRunWebhook = false,
-    SendDropWebhook = false,
-}
-
-Hub.Runtime = { Log = {}, Gui = nil, StatusText = nil }
-local LogFile = "dq_clean_v18_log.jsonl"
-local SummaryFile = "dq_clean_v18_summary.txt"
-
-local function typeofSafe(v)
-    if typeof then local ok, t = pcall(typeof, v); if ok then return t end end
-    return type(v)
-end
-
-local function esc(s)
-    s = tostring(s)
-    return s:gsub("\\","\\\\"):gsub('"','\\"'):gsub("\n","\\n"):gsub("\r","\\r"):gsub("\t","\\t")
-end
-
-local function json(v, depth, seen)
-    depth = depth or 0; seen = seen or {}
-    if depth > 6 then return "\"<max_depth>\"" end
-    local t = typeofSafe(v)
-    if t == "nil" then return "null" end
-    if t == "boolean" or t == "number" then return tostring(v) end
-    if t == "string" then return "\"" .. esc(v) .. "\"" end
-    if t == "table" then
-        if seen[v] then return "\"<cycle>\"" end
-        seen[v] = true
-        local isArray, maxIndex = true, 0
-        for k in pairs(v) do
-            if type(k) ~= "number" then isArray = false break end
-            if k > maxIndex then maxIndex = k end
+    local function GetGuiParent()
+        if type(gethui) == "function" then
+            local Ok, Result = pcall(gethui)
+            if Ok and Result then
+                return Result
+            end
         end
-        local parts = {}
-        if isArray then
-            for i = 1, maxIndex do table.insert(parts, json(v[i], depth + 1, seen)) end
-            return "[" .. table.concat(parts, ",") .. "]"
-        end
-        for k, val in pairs(v) do
-            table.insert(parts, json(tostring(k), depth + 1, seen) .. ":" .. json(val, depth + 1, seen))
-        end
-        return "{" .. table.concat(parts, ",") .. "}"
-    end
-    return "\"" .. esc("<" .. tostring(t) .. ":" .. tostring(v) .. ">") .. "\""
-end
 
-local function encode(v)
-    local ok, http = pcall(function() return game:GetService("HttpService") end)
-    if ok and http and http.JSONEncode then
-        local ok2, encoded = pcall(function() return http:JSONEncode(v) end)
-        if ok2 then return encoded end
-    end
-    return json(v)
-end
-
-local function append(path, line)
-    if appendfile then local ok = pcall(function() appendfile(path, line .. "\n") end); if ok then return true end end
-    if writefile and readfile and isfile then
-        local ok = pcall(function()
-            local old = ""; if isfile(path) then old = readfile(path) end
-            writefile(path, old .. line .. "\n")
+        local OkCoreGui, CoreGui = pcall(function()
+            return game:GetService("CoreGui")
         end)
-        if ok then return true end
-    end
-    return false
-end
 
-function Hub.log(kind, data)
-    local event = { version = Hub.Version, time = os and os.time and os.time() or 0, kind = tostring(kind), data = data or {} }
-    table.insert(Hub.Runtime.Log, event)
-    append(LogFile, encode(event))
-    print("[DQ Clean v18]", kind)
-    if Hub.Runtime.StatusText then
-        Hub.Runtime.StatusText.Text = "Last event: " .. tostring(kind) .. "\nEvents: " .. tostring(#Hub.Runtime.Log) .. "\nLog: " .. LogFile .. "\nSummary: " .. SummaryFile
-    end
-    return event
-end
-
-local function blocked(name, reason, data)
-    return Hub.log("blocked", { name = tostring(name), reason = tostring(reason), data = data or {} })
-end
-
-function Hub.resetLog()
-    if writefile then pcall(function() writefile(LogFile, "") end) end
-    Hub.Runtime.Log = {}
-end
-
-function Hub.exportSummary()
-    local lines = {}
-    table.insert(lines, "DQ Clean v18 Summary")
-    table.insert(lines, "Version: " .. Hub.Version)
-    table.insert(lines, "Events: " .. tostring(#Hub.Runtime.Log))
-    table.insert(lines, "OriginalVM: removed")
-    table.insert(lines, "KeySystem: removed")
-    table.insert(lines, "ExternalHTTP: blocked")
-    table.insert(lines, "DiscordWebhook: blocked")
-    table.insert(lines, "DashboardTelemetry: blocked")
-    table.insert(lines, "ExternalRayfield: removed")
-    table.insert(lines, "QueueOnTeleport: blocked")
-    table.insert(lines, "GameRemotes: stubbed only")
-    table.insert(lines, "Upload: " .. LogFile .. " and " .. SummaryFile)
-    local text = table.concat(lines, "\n")
-    if writefile then pcall(function() writefile(SummaryFile, text) end) end
-    return Hub.log("summary_exported", { path = SummaryFile })
-end
-
-function Hub.assertSecurity()
-    for key, expected in pairs({
-        AllowOriginalVM=false, AllowKeySystem=false, AllowExternalHttp=false,
-        AllowDiscordWebhook=false, AllowDashboardTelemetry=false, AllowQueueOnTeleport=false,
-        AllowExternalUILoad=false, AllowGameRemotes=false, DryRun=true,
-    }) do
-        if Hub.SecurityPolicy[key] == expected then
-            Hub.log("security_pass", {key=key, value=expected})
-        else
-            Hub.log("security_fail", {key=key, expected=expected, actual=Hub.SecurityPolicy[key]})
+        if OkCoreGui and CoreGui then
+            return CoreGui
         end
+
+        return LocalPlayer:WaitForChild("PlayerGui")
     end
-end
 
-Hub.KeySystem = nil
-Hub.Network = {}
-function Hub.Network.request(payload) return blocked("request","external HTTP removed",payload) end
-function Hub.Network.httpGet(label) return blocked("HttpGet","external loader removed",{label=label}) end
-function Hub.Network.sendUserWebhook(payload) return blocked("user_webhook","Discord webhook disabled",payload) end
-function Hub.Network.sendGlobalUltimateWebhook(payload) return blocked("global_ultimate_webhook","hardcoded global webhook removed",payload) end
-function Hub.Network.updateDashboardTelemetry(payload) return blocked("dashboard_telemetry","Vercel/dashboard telemetry removed",payload) end
-function Hub.Network.queueOnTeleport(code) return blocked("queue_on_teleport","teleport persistence removed",{preview=tostring(code):sub(1,150)}) end
+    local function Create(ClassName, Properties, Children)
+        local Object = Instance.new(ClassName)
 
-Hub.ConfigSystem = {}
-function Hub.ConfigSystem.ensureFolder()
-    if makefolder and isfolder and not isfolder(Hub.Config.ConfigFolder) then
-        makefolder(Hub.Config.ConfigFolder); Hub.log("config_folder_created", {folder=Hub.Config.ConfigFolder})
+        for Key, Value in pairs(Properties or {}) do
+            Object[Key] = Value
+        end
+
+        for _, Child in ipairs(Children or {}) do
+            Child.Parent = Object
+        end
+
+        return Object
     end
-end
-function Hub.ConfigSystem.sanitized()
-    local copy = {}
-    for k,v in pairs(Hub.Config) do if k=="UserWebhookUrl" then copy[k]="" else copy[k]=v end end
-    return copy
-end
-function Hub.ConfigSystem.save(name)
-    name = tostring(name or Hub.Config.ConfigName or "default")
-    if not writefile then return blocked("writefile","writefile unavailable",{name=name}) end
-    Hub.ConfigSystem.ensureFolder()
-    local path = Hub.Config.ConfigFolder .. name .. ".json"
-    writefile(path, encode(Hub.ConfigSystem.sanitized()))
-    return Hub.log("config_saved", {path=path, webhookPersisted=false})
-end
-function Hub.ConfigSystem.load(name)
-    name = tostring(name or Hub.Config.ConfigName or "default")
-    local path = Hub.Config.ConfigFolder .. name .. ".json"
-    if not readfile or not isfile or not isfile(path) then return blocked("readfile","config missing",{path=path}) end
-    local raw = readfile(path)
-    return Hub.log("config_loaded_raw", {path=path, bytes=#raw})
-end
 
-Hub.Payloads = {}
-function Hub.Payloads.runLog(run)
-    run = run or {}
-    return { embeds = {{ title = run.success and "Dungeon Completed!" or "Dungeon Failed!", fields = {
-        {name="Player", value=tostring(run.player or "unknown")},
-        {name="Dungeon", value=tostring(run.dungeon or "unknown")},
-        {name="Level", value=tostring(run.level or "unknown")},
-        {name="Gold", value=tostring(run.gold or "unknown")},
-        {name="Time", value=tostring(run.time or "unknown")},
-        {name="EXP", value=tostring(run.exp or "unknown")},
-        {name="Drops", value=tostring(run.drops or "none")},
-    } }} }
-end
-function Hub.Payloads.ultimateDrop(item)
-    return { embeds = {{ title = "Ultimate Drop: " .. tostring(item and (item.Name or item.name) or "unknown"), footer = { text = "Nihility Hub Ultimate Tracker - local only" } }} }
-end
-function Hub.onRunFinished(run)
-    local payload = Hub.Payloads.runLog(run); Hub.log("run_payload_built", payload)
-    if Hub.Config.SendRunWebhook then Hub.Network.sendUserWebhook(payload) end
-end
-function Hub.onUltimateDrop(item)
-    local payload = Hub.Payloads.ultimateDrop(item); Hub.log("ultimate_payload_built", payload)
-    if Hub.Config.SendDropWebhook then Hub.Network.sendUserWebhook(payload) end
-    Hub.Network.sendGlobalUltimateWebhook(payload)
-end
-function Hub.updateDashboardStats()
-    return Hub.Network.updateDashboardTelemetry({key="dungeon-quest", dungeon=Hub.Config.SelectedDungeon, difficulty=Hub.Config.SelectedDifficulty})
-end
+    local function Corner(Radius)
+        return Create("UICorner", {
+            CornerRadius = UDim.new(0, Radius or 10),
+        })
+    end
 
-Hub.Remotes = {}
-local function remoteStub(name, ...)
-    local args = {...}
-    Hub.log("remote_stub", {name=tostring(name), argc=#args, args=args, evidence=Hub.StaticEvidence.RecoveredActionSymbols[tostring(name)] or nil, fired=false, reason="game remotes disabled; tuple not proven"})
-    if Hub.SecurityPolicy.AllowGameRemotes then error("Live remotes intentionally not implemented: " .. tostring(name)) end
+    local function Stroke(Color, Thickness, Transparency)
+        return Create("UIStroke", {
+            Color = Color or Colors.Stroke,
+            Thickness = Thickness or 1,
+            Transparency = Transparency or 0.25,
+        })
+    end
+
+    local function Padding(Left, Top, Right, Bottom)
+        return Create("UIPadding", {
+            PaddingLeft = UDim.new(0, Left or 0),
+            PaddingTop = UDim.new(0, Top or 0),
+            PaddingRight = UDim.new(0, Right or 0),
+            PaddingBottom = UDim.new(0, Bottom or 0),
+        })
+    end
+
+    local function ListLayout(PaddingPixels)
+        return Create("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, PaddingPixels or 8),
+        })
+    end
+
+    local function Tween(Object, Time, Properties)
+        local Info = TweenInfo.new(Time or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local Anim = TweenService:Create(Object, Info, Properties)
+        Anim:Play()
+        return Anim
+    end
+
+    local function MakeDraggable(Handle, Target)
+        local Dragging = false
+        local DragStart = nil
+        local StartPosition = nil
+
+        Handle.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                Dragging = true
+                DragStart = Input.Position
+                StartPosition = Target.Position
+
+                Input.Changed:Connect(function()
+                    if Input.UserInputState == Enum.UserInputState.End then
+                        Dragging = false
+                    end
+                end)
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(Input)
+            if not Dragging then
+                return
+            end
+
+            if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then
+                return
+            end
+
+            local Delta = Input.Position - DragStart
+            Target.Position = UDim2.new(
+                StartPosition.X.Scale,
+                StartPosition.X.Offset + Delta.X,
+                StartPosition.Y.Scale,
+                StartPosition.Y.Offset + Delta.Y
+            )
+        end)
+    end
+
+    local ScreenGui = Create("ScreenGui", {
+        Name = "MiniRayfieldLocal",
+        IgnoreGuiInset = true,
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        Parent = GetGuiParent(),
+    })
+
+    local Existing = ScreenGui.Parent:FindFirstChild("MiniRayfieldLocal")
+    if Existing and Existing ~= ScreenGui then
+        Existing:Destroy()
+    end
+
+    local NotificationHolder = Create("Frame", {
+        Name = "Notifications",
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -18, 0, 18),
+        Size = UDim2.new(0, 360, 1, -36),
+        BackgroundTransparency = 1,
+        Parent = ScreenGui,
+    }, {
+        ListLayout(10),
+    })
+
+    NotificationHolder.UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    NotificationHolder.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+
+    function Rayfield:Notify(Config)
+        Config = Config or {}
+
+        local Duration = tonumber(Config.Duration) or 5
+        local Title = tostring(Config.Title or "Notification")
+        local Content = tostring(Config.Content or "")
+
+        local Card = Create("Frame", {
+            Name = "Notification",
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = Colors.Panel,
+            BackgroundTransparency = 0.03,
+            ClipsDescendants = true,
+            Parent = NotificationHolder,
+        }, {
+            Corner(13),
+            Stroke(Colors.Stroke, 1, 0.1),
+            Padding(14, 12, 14, 12),
+        })
+
+        local Bar = Create("Frame", {
+            Name = "AccentBar",
+            Position = UDim2.new(0, 0, 0, 0),
+            Size = UDim2.new(0, 4, 1, 0),
+            BackgroundColor3 = Colors.Accent,
+            BorderSizePixel = 0,
+            Parent = Card,
+        }, {
+            Corner(13),
+        })
+
+        local Body = Create("Frame", {
+            Name = "Body",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, -8, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Position = UDim2.new(0, 8, 0, 0),
+            Parent = Card,
+        }, {
+            ListLayout(4),
+        })
+
+        Create("TextLabel", {
+            Name = "Title",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 20),
+            Font = SemiboldFont,
+            Text = Title,
+            TextColor3 = Colors.Text,
+            TextSize = 15,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            TextWrapped = true,
+            Parent = Body,
+        })
+
+        Create("TextLabel", {
+            Name = "Content",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Font = Font,
+            Text = Content,
+            TextColor3 = Colors.Muted,
+            TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            TextWrapped = true,
+            Parent = Body,
+        })
+
+        Card.Position = UDim2.new(0, 420, 0, 0)
+        Tween(Card, 0.22, { Position = UDim2.new(0, 0, 0, 0) })
+
+        task.delay(Duration, function()
+            if Card and Card.Parent then
+                Tween(Card, 0.18, {
+                    Position = UDim2.new(0, 420, 0, 0),
+                    BackgroundTransparency = 1,
+                })
+                task.wait(0.2)
+                if Card and Card.Parent then
+                    Card:Destroy()
+                end
+            end
+        end)
+    end
+
+    function Rayfield:CreateWindow(Config)
+        Config = Config or {}
+
+        local Window = {}
+        Window.Tabs = {}
+        Window.CurrentTab = nil
+
+        local Main = Create("Frame", {
+            Name = "Window",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            Size = UDim2.new(0, 760, 0, 500),
+            BackgroundColor3 = Colors.Background,
+            ClipsDescendants = true,
+            Parent = ScreenGui,
+        }, {
+            Corner(16),
+            Stroke(Colors.Stroke, 1, 0.08),
+        })
+
+        local Topbar = Create("Frame", {
+            Name = "Topbar",
+            Size = UDim2.new(1, 0, 0, 58),
+            BackgroundColor3 = Colors.Panel,
+            BorderSizePixel = 0,
+            Parent = Main,
+        })
+
+        local TitleLabel = Create("TextLabel", {
+            Name = "Title",
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 18, 0, 8),
+            Size = UDim2.new(1, -112, 0, 24),
+            Font = BoldFont,
+            Text = tostring(Config.Name or "Window"),
+            TextColor3 = Colors.Text,
+            TextSize = 15,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Parent = Topbar,
+        })
+
+        Create("TextLabel", {
+            Name = "Subtitle",
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 18, 0, 31),
+            Size = UDim2.new(1, -112, 0, 18),
+            Font = Font,
+            Text = tostring(Config.LoadingSubtitle or "Local UI"),
+            TextColor3 = Colors.Muted,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Parent = Topbar,
+        })
+
+        local MinimizeButton = Create("TextButton", {
+            Name = "Minimize",
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -54, 0, 14),
+            Size = UDim2.new(0, 30, 0, 30),
+            AutoButtonColor = false,
+            BackgroundColor3 = Colors.Panel2,
+            Font = BoldFont,
+            Text = "–",
+            TextColor3 = Colors.Text,
+            TextSize = 18,
+            Parent = Topbar,
+        }, {
+            Corner(8),
+            Stroke(Colors.Stroke, 1, 0.35),
+        })
+
+        local CloseButton = Create("TextButton", {
+            Name = "Close",
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -18, 0, 14),
+            Size = UDim2.new(0, 30, 0, 30),
+            AutoButtonColor = false,
+            BackgroundColor3 = Colors.Panel2,
+            Font = BoldFont,
+            Text = "×",
+            TextColor3 = Colors.Text,
+            TextSize = 18,
+            Parent = Topbar,
+        }, {
+            Corner(8),
+            Stroke(Colors.Stroke, 1, 0.35),
+        })
+
+        local Sidebar = Create("Frame", {
+            Name = "Sidebar",
+            Position = UDim2.new(0, 0, 0, 58),
+            Size = UDim2.new(0, 190, 1, -58),
+            BackgroundColor3 = Colors.Panel,
+            BorderSizePixel = 0,
+            Parent = Main,
+        }, {
+            Padding(12, 12, 12, 12),
+            ListLayout(8),
+        })
+
+        local Content = Create("Frame", {
+            Name = "Content",
+            Position = UDim2.new(0, 190, 0, 58),
+            Size = UDim2.new(1, -190, 1, -58),
+            BackgroundColor3 = Colors.Background,
+            BorderSizePixel = 0,
+            Parent = Main,
+        }, {
+            Padding(14, 14, 14, 14),
+        })
+
+        MakeDraggable(Topbar, Main)
+
+        local IsMinimized = false
+
+        MinimizeButton.MouseButton1Click:Connect(function()
+            IsMinimized = not IsMinimized
+            Sidebar.Visible = not IsMinimized
+            Content.Visible = not IsMinimized
+            Tween(Main, 0.2, {
+                Size = IsMinimized and UDim2.new(0, 760, 0, 58) or UDim2.new(0, 760, 0, 500),
+            })
+            MinimizeButton.Text = IsMinimized and "+" or "–"
+        end)
+
+        CloseButton.MouseButton1Click:Connect(function()
+            ScreenGui:Destroy()
+        end)
+
+        function Window:CreateTab(TabName, Icon)
+            local Tab = {}
+            Tab.Name = tostring(TabName or "Tab")
+
+            local TabButton = Create("TextButton", {
+                Name = "TabButton",
+                Size = UDim2.new(1, 0, 0, 38),
+                AutoButtonColor = false,
+                BackgroundColor3 = Colors.Panel2,
+                Font = SemiboldFont,
+                Text = Tab.Name,
+                TextColor3 = Colors.Muted,
+                TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = Sidebar,
+            }, {
+                Corner(10),
+                Stroke(Colors.Stroke, 1, 0.55),
+                Padding(12, 0, 12, 0),
+            })
+
+            local TabPage = Create("ScrollingFrame", {
+                Name = Tab.Name,
+                Size = UDim2.new(1, 0, 1, 0),
+                CanvasSize = UDim2.new(0, 0, 0, 0),
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                ScrollBarThickness = 4,
+                ScrollBarImageColor3 = Colors.Accent,
+                Visible = false,
+                Parent = Content,
+            }, {
+                Padding(2, 2, 8, 12),
+                ListLayout(10),
+            })
+
+            local function SelectTab()
+                for _, Other in ipairs(Window.Tabs) do
+                    Other.Page.Visible = false
+                    Tween(Other.Button, 0.12, {
+                        BackgroundColor3 = Colors.Panel2,
+                        TextColor3 = Colors.Muted,
+                    })
+                end
+
+                TabPage.Visible = true
+                Tween(TabButton, 0.12, {
+                    BackgroundColor3 = Colors.Accent,
+                    TextColor3 = Colors.Text,
+                })
+                Window.CurrentTab = Tab
+            end
+
+            TabButton.MouseButton1Click:Connect(SelectTab)
+
+            local function CreateCard(Height)
+                return Create("Frame", {
+                    Size = UDim2.new(1, 0, 0, Height or 68),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundColor3 = Colors.Panel,
+                    Parent = TabPage,
+                }, {
+                    Corner(12),
+                    Stroke(Colors.Stroke, 1, 0.42),
+                    Padding(14, 12, 14, 12),
+                })
+            end
+
+            function Tab:CreateParagraph(Config)
+                Config = Config or {}
+
+                local Card = CreateCard(70)
+                local Stack = Create("Frame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Parent = Card,
+                }, {
+                    ListLayout(4),
+                })
+
+                Create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 19),
+                    Font = SemiboldFont,
+                    Text = tostring(Config.Title or "Paragraph"),
+                    TextColor3 = Colors.Text,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextWrapped = true,
+                    Parent = Stack,
+                })
+
+                Create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Font = Font,
+                    Text = tostring(Config.Content or ""),
+                    TextColor3 = Colors.Muted,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextWrapped = true,
+                    Parent = Stack,
+                })
+
+                return Card
+            end
+
+            function Tab:CreateInput(Config)
+                Config = Config or {}
+
+                local Card = CreateCard(92)
+                local NameLabel = Create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(0, 0, 0, 0),
+                    Size = UDim2.new(1, 0, 0, 20),
+                    Font = SemiboldFont,
+                    Text = tostring(Config.Name or "Input"),
+                    TextColor3 = Colors.Text,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = Card,
+                })
+
+                local Box = Create("TextBox", {
+                    BackgroundColor3 = Colors.Panel2,
+                    Position = UDim2.new(0, 0, 0, 34),
+                    Size = UDim2.new(1, 0, 0, 38),
+                    ClearTextOnFocus = false,
+                    Font = Font,
+                    PlaceholderText = tostring(Config.PlaceholderText or "Type here..."),
+                    PlaceholderColor3 = Colors.DarkText,
+                    Text = "",
+                    TextColor3 = Colors.Text,
+                    TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = Card,
+                }, {
+                    Corner(10),
+                    Stroke(Colors.Stroke, 1, 0.45),
+                    Padding(12, 0, 12, 0),
+                })
+
+                Box.Focused:Connect(function()
+                    Tween(Box, 0.12, { BackgroundColor3 = Colors.Panel3 })
+                end)
+
+                Box.FocusLost:Connect(function(EnterPressed)
+                    Tween(Box, 0.12, { BackgroundColor3 = Colors.Panel2 })
+
+                    if EnterPressed then
+                        local Text = Box.Text
+
+                        if type(Config.Callback) == "function" then
+                            task.spawn(Config.Callback, Text)
+                        end
+
+                        if Config.RemoveTextAfterFocusLost then
+                            Box.Text = ""
+                        end
+                    end
+                end)
+
+                return Box
+            end
+
+            function Tab:CreateToggle(Config)
+                Config = Config or {}
+
+                local Value = Config.CurrentValue == true
+                local Card = CreateCard(58)
+
+                local Label = Create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(0, 0, 0, 0),
+                    Size = UDim2.new(1, -76, 0, 34),
+                    Font = SemiboldFont,
+                    Text = tostring(Config.Name or "Toggle"),
+                    TextColor3 = Colors.Text,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                    Parent = Card,
+                })
+
+                local Switch = Create("TextButton", {
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.new(0, 56, 0, 30),
+                    AutoButtonColor = false,
+                    BackgroundColor3 = Value and Colors.Accent or Colors.Panel2,
+                    Text = "",
+                    Parent = Card,
+                }, {
+                    Corner(999),
+                    Stroke(Colors.Stroke, 1, 0.45),
+                })
+
+                local Knob = Create("Frame", {
+                    Position = Value and UDim2.new(1, -27, 0.5, -11) or UDim2.new(0, 5, 0.5, -11),
+                    Size = UDim2.new(0, 22, 0, 22),
+                    BackgroundColor3 = Colors.Text,
+                    Parent = Switch,
+                }, {
+                    Corner(999),
+                })
+
+                local function Set(NewValue, FireCallback)
+                    Value = NewValue == true
+
+                    Tween(Switch, 0.15, {
+                        BackgroundColor3 = Value and Colors.Accent or Colors.Panel2,
+                    })
+
+                    Tween(Knob, 0.15, {
+                        Position = Value and UDim2.new(1, -27, 0.5, -11) or UDim2.new(0, 5, 0.5, -11),
+                    })
+
+                    if FireCallback and type(Config.Callback) == "function" then
+                        task.spawn(Config.Callback, Value)
+                    end
+                end
+
+                Switch.MouseButton1Click:Connect(function()
+                    Set(not Value, true)
+                end)
+
+                Card.InputBegan:Connect(function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                        Set(not Value, true)
+                    end
+                end)
+
+                local ToggleObject = {}
+
+                function ToggleObject:Set(NewValue)
+                    Set(NewValue, true)
+                end
+
+                function ToggleObject:Get()
+                    return Value
+                end
+
+                return ToggleObject
+            end
+
+            Tab.Button = TabButton
+            Tab.Page = TabPage
+            table.insert(Window.Tabs, Tab)
+
+            if not Window.CurrentTab then
+                SelectTab()
+            end
+
+            return Tab
+        end
+
+        if Config.LoadingTitle then
+            Rayfield:Notify({
+                Title = tostring(Config.LoadingTitle),
+                Content = tostring(Config.LoadingSubtitle or ""),
+                Duration = 2,
+            })
+        end
+
+        return Window
+    end
+
+    return Rayfield
 end
-function Hub.Remotes.vote(...) return remoteStub("vote",...) end
-function Hub.Remotes.PlaySolo(...) return remoteStub("PlaySolo",...) end
-function Hub.Remotes.ReturnToLobby(...) return remoteStub("ReturnToLobby",...) end
-function Hub.Remotes.RetryVote(...) return remoteStub("RetryVote",...) end
-function Hub.Remotes.changeStartValue(...) return remoteStub("changeStartValue",...) end
-function Hub.Remotes.CreateParty(...) return remoteStub("CreateParty",...) end
-function Hub.Remotes.GetPlayerParty(...) return remoteStub("GetPlayerParty",...) end
-function Hub.Remotes.HandleJoinRequest(...) return remoteStub("HandleJoinRequest",...) end
-function Hub.Remotes.KickMember(...) return remoteStub("KickMember",...) end
-function Hub.Remotes.StartParty(...) return remoteStub("StartParty",...) end
-function Hub.Remotes.JoinParty(...) return remoteStub("JoinParty",...) end
-function Hub.Remotes.reloadInvy(...) return remoteStub("reloadInvy",...) end
-function Hub.Remotes.sellItemEvent(...) return remoteStub("sellItemEvent",...) end
-function Hub.Remotes.HandleEnemy(...) return remoteStub("HandleEnemy",...) end
-function Hub.Remotes.WeaponAttack(...) return remoteStub("Weapon.Attack",...) end
-function Hub.Remotes.spellEvent(...) return remoteStub("spellEvent",...) end
-function Hub.Remotes.abilityEvent(...) return remoteStub("abilityEvent",...) end
-function Hub.Remotes.localEvent(...) return remoteStub("localEvent",...) end
-
-Hub.Dungeon = {}
-function Hub.Dungeon.joinSelected() return Hub.Remotes.PlaySolo(Hub.Config.SelectedDungeon, Hub.Config.SelectedDifficulty) end
-function Hub.Dungeon.retry() return Hub.Remotes.RetryVote(true) end
-function Hub.Dungeon.voteBonusBoss(v) Hub.Config.AutoBonusBoss = v == true; return Hub.Remotes.vote("BonusBoss",Hub.Config.AutoBonusBoss) end
-function Hub.Dungeon.returnToLobby() return Hub.Remotes.ReturnToLobby() end
-
-Hub.Party = {}
-function Hub.Party.create() return Hub.Remotes.CreateParty({mode="Carry", visibility="Private", dryRun=true}) end
-function Hub.Party.start() return Hub.Remotes.StartParty() end
-function Hub.Party.join(owner) return Hub.Remotes.JoinParty(owner) end
-function Hub.Party.kick(member) return Hub.Remotes.KickMember(member) end
-function Hub.Party.handleJoinRequest(player, accept) return Hub.Remotes.HandleJoinRequest(player, accept) end
-
-Hub.Inventory = {}
-function Hub.Inventory.reload() return Hub.Remotes.reloadInvy() end
-function Hub.Inventory.shouldSell(_) return false end
-function Hub.Inventory.autoSell(items)
-    Hub.Inventory.reload()
-    for _, item in pairs(items or {}) do if Hub.Inventory.shouldSell(item) then Hub.Remotes.sellItemEvent(item) end end
-end
-
-Hub.Combat = {}
-function Hub.Combat.handleEnemy(enemy) Hub.Remotes.HandleEnemy(enemy); if Hub.Config.Killaura then Hub.Remotes.WeaponAttack(enemy) end end
-function Hub.Combat.castSkill(slot,target) Hub.Remotes.spellEvent(slot,target); Hub.Remotes.abilityEvent(slot,target); Hub.Remotes.localEvent("skill",slot,target) end
-
-Hub.Loops = {}
-function Hub.Loops.autoFarmTick()
-    if not Hub.Config.AutoFarm then return Hub.log("loop_skip", {loop="AutoFarm"}) end
-    if Hub.Config.AutoJoin then Hub.Dungeon.joinSelected() end
-    if Hub.Config.AutoBonusBoss then Hub.Dungeon.voteBonusBoss(true) end
-    if Hub.Config.Killaura then Hub.Combat.handleEnemy("DRY_RUN_ENEMY") end
-    if Hub.Config.AutoSell then Hub.Inventory.autoSell({}) end
-end
-
-Hub.UI = {}
-local function makeButton(parent, x, y, text, callback)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, 155, 0, 28); b.Position = UDim2.new(0, x, 0, y)
-    b.BackgroundColor3 = Color3.fromRGB(43,48,64); b.TextColor3 = Color3.fromRGB(240,244,255)
-    b.TextSize = 11; b.Font = Enum.Font.GothamSemibold; b.Text = text; b.Parent = parent
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,8); c.Parent = b
-    b.MouseButton1Click:Connect(function() local ok,err=pcall(callback); if not ok then Hub.log("button_error",{button=text,error=tostring(err)}) end end)
-    return b
-end
-function Hub.UI.createLocal()
-    local ok, err = pcall(function()
-        local p = game:GetService("Players").LocalPlayer
-        local parent = p and p:FindFirstChildOfClass("PlayerGui")
-        if not parent then return end
-        local old = parent:FindFirstChild("DQCleanV18"); if old then old:Destroy() end
-        local gui = Instance.new("ScreenGui"); gui.Name="DQCleanV18"; gui.ResetOnSpawn=false; gui.Parent=parent
-        local frame = Instance.new("Frame"); frame.Size=UDim2.new(0,560,0,390); frame.Position=UDim2.new(0,20,0,85); frame.BackgroundColor3=Color3.fromRGB(22,24,32); frame.BorderSizePixel=0; frame.Parent=gui
-        local fc=Instance.new("UICorner"); fc.CornerRadius=UDim.new(0,12); fc.Parent=frame
-        local title=Instance.new("TextLabel"); title.BackgroundTransparency=1; title.Position=UDim2.new(0,14,0,10); title.Size=UDim2.new(1,-28,0,24); title.Font=Enum.Font.GothamBold; title.TextSize=15; title.TextColor3=Color3.fromRGB(240,244,255); title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="DQ Clean v18 - Safe Local Test"; title.Parent=frame
-        local status=Instance.new("TextLabel"); status.BackgroundColor3=Color3.fromRGB(29,32,43); status.Position=UDim2.new(0,340,0,48); status.Size=UDim2.new(1,-354,1,-62); status.Font=Enum.Font.Gotham; status.TextSize=12; status.TextColor3=Color3.fromRGB(190,198,220); status.TextWrapped=true; status.TextXAlignment=Enum.TextXAlignment.Left; status.TextYAlignment=Enum.TextYAlignment.Top; status.Text="Ready. Log: "..LogFile; status.Parent=frame
-        local sc=Instance.new("UICorner"); sc.CornerRadius=UDim.new(0,8); sc.Parent=status
-        Hub.Runtime.StatusText=status
-        local leftX, rightX = 14, 178
-        makeButton(frame,leftX,48,"Security Test",Hub.assertSecurity)
-        makeButton(frame,rightX,48,"Export Summary",Hub.exportSummary)
-        makeButton(frame,leftX,84,"Save Config",function() Hub.ConfigSystem.save("v18test") end)
-        makeButton(frame,rightX,84,"Load Config",function() Hub.ConfigSystem.load("v18test") end)
-        makeButton(frame,leftX,120,"Run Payload",function() Hub.onRunFinished({success=true,player="DRY_RUN",dungeon=Hub.Config.SelectedDungeon,level=0,gold=0,exp=0,time="00:00",drops="none"}) end)
-        makeButton(frame,rightX,120,"Ultimate Payload",function() Hub.onUltimateDrop({Name="DRY_RUN_ULTIMATE"}) end)
-        makeButton(frame,leftX,156,"AutoFarm Dry",function() Hub.Config.AutoFarm=true; Hub.Config.AutoJoin=true; Hub.Config.AutoBonusBoss=true; Hub.Config.Killaura=true; Hub.Config.AutoSell=true; Hub.Loops.autoFarmTick() end)
-        makeButton(frame,rightX,156,"Dungeon Retry Dry",function() Hub.Dungeon.retry(); Hub.Dungeon.returnToLobby() end)
-        makeButton(frame,leftX,192,"Party Dry",function() Hub.Party.create(); Hub.Party.handleJoinRequest("DRY_RUN_PLAYER",true); Hub.Party.kick("DRY_RUN_PLAYER"); Hub.Party.start() end)
-        makeButton(frame,rightX,192,"Combat Dry",function() Hub.Combat.handleEnemy("DRY_RUN_ENEMY"); Hub.Combat.castSkill("DRY_RUN_SLOT","DRY_RUN_ENEMY") end)
-        makeButton(frame,leftX,228,"Inventory Dry",function() Hub.Inventory.autoSell({{Name="DRY_RUN_ITEM"}}) end)
-        makeButton(frame,rightX,228,"Blocked Net Dry",function() Hub.Network.httpGet("external"); Hub.Network.request({Url="blocked"}); Hub.Network.queueOnTeleport("blocked") end)
-    end)
-    if ok then return Hub.log("local_ui_created", {ui="DQCleanV18"}) end
-    return Hub.log("local_ui_failed", {error=tostring(err)})
-end
-
-function Hub.selfTest()
-    Hub.resetLog()
-    Hub.assertSecurity()
-    Hub.Network.httpGet("external-ui-removed")
-    Hub.Network.request({label="external-http-removed"})
-    Hub.Network.queueOnTeleport("removed")
-    Hub.updateDashboardStats()
-    Hub.ConfigSystem.save("startup")
-    Hub.ConfigSystem.load("startup")
-    Hub.UI.createLocal()
-    Hub.exportSummary()
-    Hub.log("self_test_complete", {outputFile=LogFile, summaryFile=SummaryFile})
-    print("[DQ Clean v18] Ready. Click UI buttons, then upload " .. LogFile .. " and " .. SummaryFile)
-end
-
-Hub.selfTest()
-return Hub
