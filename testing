@@ -1,413 +1,452 @@
-local RS = game:GetService("ReplicatedStorage")
-local LP = game:GetService("Players").LocalPlayer
-local AnswerFunction = RS:WaitForChild("AnswerFunction")
-local QuestionEvent = RS:WaitForChild("QuestionEvent")
-local CoinEvent = RS:WaitForChild("CoinEvent")
-local GameGui = LP:WaitForChild("PlayerGui"):WaitForChild("GameGui")
-local QuestionLabel = GameGui:WaitForChild("Prompt"):WaitForChild("Question")
+--[[
+DQ Delta Executor Dry-Run Dump Script
+Version: v15-delta-dump
 
--- PASTE YOUR DISCORD WEBHOOK URL HERE
-local WEBHOOK = "YOUR_WEBHOOK_URL_HERE"
+Run this in Delta when you get the chance.
 
-local Answering = false
-local Log = { seen = {}, correct = {}, failed = {}, unknown = {} }
+This script:
+- does NOT run the original obfuscated DQ script
+- does NOT load external URLs
+- does NOT send Discord webhooks
+- does NOT call the Vercel/dashboard API
+- does NOT queue anything on teleport
+- does NOT FireServer/InvokeServer any game remotes
+- creates local dump/log files for us to review
 
-local function SendWebhook(content)
-	pcall(function()
-		syn.request({
-			Url = WEBHOOK,
-			Method = "POST",
-			Headers = {["Content-Type"] = "application/json"},
-			Body = game:GetService("HttpService"):JSONEncode({
-				username = "WordBridge Logger",
-				content = content
-			})
-		})
-	end)
-end
+Expected files:
+- dq_delta_dump.jsonl
+- dq_delta_summary.txt
 
--- Each entry is a list of answers ordered longest-to-shortest but all valid
-local answers = {
-	["Name a kitchen appliance"] = {"refrigerator","dishwasher","microwave","blender","toaster"},
-	["What is something associated with pirates"] = {"treasure chest","jolly roger","cannon ball","pirate ship","parrot"},
-	["What is one ice cream topping?"] = {"whipped cream","chocolate sauce","caramel sauce","sprinkles","cherries"},
-	["Name a car brand"] = {"lamborghini","mercedes benz","volkswagen","chevrolet","ferrari","honda","ford"},
-	["What is something you would find in your closet"] = {"clothes hanger","winter jacket","dress shirt","shoes","clothes"},
-	["Name a marine animal"] = {"great white shark","humpback whale","bottlenose dolphin","octopus","seahorse","shark"},
-	["Name a drink with caffeine"] = {"energy drink","espresso","coffee","tea"},
-	["What is one common baking ingredient"] = {"baking powder","baking soda","vanilla extract","flour","sugar","butter"},
-	["Name a breakfast item"] = {"scrambled eggs","french toast","pancakes","waffles","cereal","bacon"},
-	["Name a movie genre"] = {"science fiction","documentary","romantic comedy","horror","action","comedy"},
-	["Name a disney princess"] = {"vanellope von schweetz","rapunzel","cinderella","ariel","elsa","moana"},
-	["Name a type of sword"] = {"double edged sword","katana","longsword","broadsword","rapier"},
-	["Name a snake"] = {"diamondback rattlesnake","king cobra","boa constrictor","anaconda","python","cobra"},
-	["What is something that's yellow?"] = {"school bus","sunflower","banana","lemon","corn","gold"},
-	["What is one thing you would find at a birthday party"] = {"birthday cake","balloons","presents","candles","streamers"},
-	["Name a form of public transportation"] = {"underground subway","double decker bus","trolley","subway","train","bus"},
-	["What is something that would be worn during winter?"] = {"winter jacket","thermal underwear","wool sweater","scarf","gloves","coat"},
-	["Name a type of meat"] = {"chicken breast","pork chop","ground beef","steak","bacon","chicken","beef"},
-	["Name a character from Stranger Things"] = {"eleven","demogorgon","hopper","dustin","mike","will"},
-	["What is an animal present in Minecraft"] = {"ocelot","creeper","chicken","cow","pig","sheep","horse"},
-	["Name a month of the year"] = {"september","november","december","october","january","february","march"},
-	["What is an animal that you would find in a zoo?"] = {"hippopotamus","chimpanzee","rhinoceros","elephant","giraffe","gorilla","lion"},
-	["Name a TWO dimensional shape"] = {"parallelogram","trapezoid","pentagon","rectangle","triangle","square","circle"},
-	["Name a character from Spongebob Squarepants"] = {"sandy cheeks","squidward","patrick","spongebob","gary"},
-	["What is something you would find in a movie theater"] = {"popcorn machine","recliner seat","popcorn","tickets","screen"},
-	["Name a gaming console"] = {"playstation five","nintendo switch","xbox series x","playstation","xbox","nintendo"},
-	["What is one thing associated with Christmas?"] = {"christmas presents","christmas tree","santa claus","reindeer","ornaments","presents"},
-	["Name a pasta noodle"] = {"fettuccine","pappardelle","tagliatelle","spaghetti","linguine","penne","rigatoni"},
-	["What is one character from Sesame Street?"] = {"big bird","cookie monster","oscar the grouch","elmo","bert","ernie"},
-	["What is one street sign"] = {"stop sign","yield sign","speed limit","no entry","stop"},
-	["What is one thing associated to Halloween?"] = {"jack o lantern","trick or treat","witch costume","pumpkin","candy","ghost"},
-	["Name a greek god"] = {"hephaestus","poseidon","aphrodite","athena","hermes","apollo","zeus"},
-	["Name a type of cheese"] = {"mozzarella","parmesan","cheddar","gouda","brie","swiss"},
-	["Colors of the rainbow?"] = {"orange","yellow","violet","indigo","green","blue","red"},
-	["Name a form of measurement"] = {"centimeters","kilometers","millimeters","fahrenheit","meters","inches","feet"},
-	["What is one marvel superhero"] = {"black widow","spiderman","iron man","captain america","thor","hulk"},
-	["Name an ocean"] = {"pacific ocean","atlantic ocean","indian ocean","arctic ocean","pacific","atlantic"},
-	["Name a type of bag"] = {"shopping bag","backpack","handbag","duffel bag","suitcase"},
-	["Name a popular candy brand"] = {"hersheys chocolate","reeses pieces","milky way","snickers","skittles","mars"},
-	["What is something related to camping?"] = {"graham crackers","sleeping bag","campfire","tent","flashlight","smores"},
-	["What is something used to light a fire"] = {"flint and steel","lighter","matchstick","matches"},
-	["Name a mythical creature"] = {"loch ness monster","werewolf","vampire","dragon","phoenix","unicorn"},
-	["What is something that can get recycled?"] = {"plastic bottle","aluminum can","newspaper","cardboard","glass bottle"},
-	["Name a number 1-10 (One-Ten)"] = {"seven","three","eight","four","six","two","one","five","nine","ten"},
-	["Name a condiment"] = {"mayonnaise","mustard","ketchup","relish","hot sauce"},
-	["What is something you would find at the beach?"] = {"seashells","sandcastle","beach umbrella","sunscreen","waves","sand","shells"},
-	["What is one dairy product?"] = {"cream cheese","chocolate milk","butter","yogurt","cheese","milk"},
-	["Name a state of matter"] = {"plasma","solid","liquid","gas"},
-	["Name a flower"] = {"chrysanthemum","sunflower","carnation","daisy","tulip","rose"},
-	["What is one form of cooked steak?"] = {"medium rare","well done","medium","rare"},
-	["Name a flightless bird"] = {"emperor penguin","ostrich","penguin","emu","kiwi"},
-	["Name a school subject"] = {"mathematics","physical education","chemistry","biology","history","english","math"},
-	["Name something that's cold"] = {"liquid nitrogen","ice cream","snowflake","freezer","ice"},
-	["Name a form of transportation"] = {"motorcycle","helicopter","submarine","airplane","bicycle","boat","car"},
-	["Name a popular streaming service"] = {"disney plus","amazon prime","hulu","netflix"},
-	["Name one of the top 10 largest animals"] = {"blue whale","elephant","giraffe","whale"},
-	["Name something you would find in a hotel"] = {"swimming pool","room service","television","minibar","bed"},
-	["Name a THREE dimensional shape"] = {"rectangular prism","triangular prism","dodecahedron","cylinder","pyramid","sphere","cube"},
-	["Name a type of footwear"] = {"hiking boots","wellington boots","running shoes","sneakers","sandals","boots"},
-	["What is one neon color?"] = {"neon green","neon pink","neon yellow","neon orange","pink","green"},
-	["Name a school supply item"] = {"protractor","highlighter","pencil case","scissors","ruler","pencil","pen"},
-	["What is one country in Europe?"] = {"liechtenstein","luxembourg","switzerland","netherlands","germany","france"},
-	["Name one part of a car"] = {"transmission","windshield","steering wheel","engine","brakes","tires"},
-	["What is something that comes in pairs?"] = {"earrings","chopsticks","cufflinks","socks","gloves","shoes","twins"},
-	["Name a type of legume (bean)"] = {"garbanzo bean","kidney bean","black bean","lima bean","pinto bean","lima"},
-	["What is something you would find at a park"] = {"playground","basketball court","picnic table","fountain","bench","grass","trees"},
-	["Name a starter pokemon"] = {"charmander","squirtle","bulbasaur","pikachu"},
-	["Name one of the astrological signs"] = {"sagittarius","capricorn","aquarius","scorpio","libra","virgo","gemini"},
-	["Name a common pet"] = {"golden retriever","hamster","rabbit","parrot","turtle","fish","dog","cat"},
-	["What is something that you can find in a Living Room?"] = {"entertainment center","coffee table","television","sofa","couch","lamp","tv"},
-	["Name a common allergy"] = {"shellfish","tree nuts","peanuts","gluten","dairy","eggs"},
-	["what is a part of a bed"] = {"headboard","footboard","mattress","pillow","frame","sheet"},
-	["Name a shoe brand"] = {"new balance","converse","adidas","jordan","gucci","nike"},
-	["What is one food served during Thanksgiving?"] = {"mashed potatoes","cranberry sauce","sweet potatoes","stuffing","turkey"},
-	["What is one element on the Periodic Table (full name)?"] = {"einsteinium","californium","fermium","uranium","oxygen","carbon","gold"},
-	["What is something that goes in a sandwich?"] = {"peanut butter","mayonnaise","mustard","lettuce","turkey","cheese"},
-	["Name one muppet"] = {"kermit","miss piggy","fozzie","gonzo","animal"},
-	["Name a chip brand"] = {"pringles","lays","doritos","cheetos","fritos"},
-	["Name a type of bread"] = {"sourdough","whole wheat","pumpernickel","ciabatta","baguette","wheat"},
-	["Name a pepper"] = {"carolina reaper","ghost pepper","habanero","jalapeno"},
-	["Name a piece of jewelry"] = {"engagement ring","bracelet","necklace","earrings","ring"},
-	["Name a music genre"] = {"heavy metal","classical","jazz","hip hop","pop","rock"},
-	["Name a type of boat"] = {"aircraft carrier","submarine","catamaran","sailboat","pontoon","kayak"},
-	["What is something you would find in a backyard"] = {"swimming pool","trampoline","lawnmower","garden","fence","grass"},
-	["What is something that's blue"] = {"swimming pool","blueberry","the ocean","sapphire","sky","water"},
-	["Name a character from the sonic franchise"] = {"sonic the hedgehog","knuckles","shadow","tails","amy","sonic"},
-	["What is something you would eat at a fair?"] = {"funnel cake","cotton candy","corn dog","churros","popcorn"},
-	["Name a precious metal"] = {"white gold","platinum","palladium","titanium","silver","gold"},
-	["What is one state in the United States?"] = {"rhode island","mississippi","california","tennessee","alabama","texas","ohio"},
-	["Name a character from The Simpsons"] = {"homer simpson","bart simpson","lisa simpson","marge","homer"},
-	["Name a holiday"] = {"thanksgiving","valentine","christmas","halloween","easter"},
-	["What is one DC superhero"] = {"wonder woman","batman","superman","flash","aquaman"},
-	["What is one social media platform?"] = {"tiktok","facebook","instagram","snapchat","twitter"},
-	["Name a cake"] = {"red velvet cake","wedding cake","carrot cake","cheesecake","birthday cake"},
-	["Name a card game"] = {"blackjack","poker","go fish","solitaire","snap"},
-	["Name a clothing material"] = {"polyester","cashmere","cotton","leather","denim","silk","wool"},
-	["Name a slow moving animal"] = {"giant tortoise","sea turtle","sloth","snail","koala"},
-	["Name something that's hot"] = {"carolina reaper","molten lava","the sun","fire","oven"},
-	["Name the last name of a President of the United States"] = {"washington","jefferson","lincoln","roosevelt","kennedy","obama"},
-	["What is something people drink in the morning?"] = {"orange juice","espresso","coffee","tea"},
-	["Name an explosive"] = {"nitroglycerin","tnt","grenade","dynamite","bomb"},
-	["Give a flavor of ice cream"] = {"chocolate chip cookie dough","cookies and cream","strawberry","vanilla","chocolate"},
-	["What is something that's green?"] = {"broccoli","avocado","grass","leaves","lime","frog"},
-	["Name a type of cookie"] = {"white chocolate chip macadamia nut","peanut butter","chocolate chip","oatmeal raisin","sugar"},
-	["Name a phone brand"] = {"samsung","motorola","apple","google","nokia"},
-	["What is something that goes on toast"] = {"peanut butter","strawberry jam","avocado","butter","honey"},
-	["What is one hair styling item?"] = {"straightener","hair dryer","curling iron","hairbrush","comb","brush"},
-	["Name a direction"] = {"northwest","southeast","northeast","southwest","north","south","east","west"},
-	["Name a popular board game"] = {"scrabble","trivial pursuit","monopoly","chess","checkers"},
-	["Name a day of the week"] = {"wednesday","thursday","saturday","tuesday","monday","friday","sunday"},
-	["What is one bodypart?"] = {"appendix","shoulder","elbow","stomach","heart","arm","leg"},
-	["Name a famous youtuber"] = {"markiplier","pewdiepie","mrbeast","jacksepticeye","denis"},
-	["What is something that's orange?"] = {"basketball","pumpkin","orange","carrot","sunset"},
-	["What is one planet in our solar system"] = {"saturn","jupiter","neptune","mercury","venus","mars","earth"},
-	["Name a citrus"] = {"grapefruit","tangerine","clementine","orange","lemon","lime"},
-	["Name a gemstone"] = {"alexandrite","amethyst","emerald","sapphire","ruby","diamond"},
-	["Name a food that you peel"] = {"tangerine","pineapple","mango","banana","orange"},
-	["Name a vegetable"] = {"asparagus","broccoli","spinach","carrot","onion","potato"},
-	["Name a continent"] = {"antarctica","australia","europe","africa","asia"},
-	["Name a makeup"] = {"foundation","eyeshadow","mascara","lipstick","blush"},
-	["Name a sport"] = {"basketball","volleyball","baseball","swimming","soccer","tennis","football"},
-	["Name a type of currency"] = {"cryptocurrency","british pound","japanese yen","euro","dollar"},
-	["Name a chesspiece"] = {"bishop","knight","queen","castle","pawn","king","rook"},
-	["Name an insect"] = {"grasshopper","dragonfly","butterfly","beetle","cricket","ant","bee"},
-	["What is a piece of eyewear?"] = {"reading glasses","sunglasses","contact lenses","goggles","glasses"},
-	["Name a popular pizza chain"] = {"dominos pizza","papa johns","pizza hut","little caesars"},
-	["Name a search engine"] = {"duckduckgo","microsoft bing","yahoo","google","bing"},
-	["Name a pie"] = {"pumpkin pie","apple pie","pecan pie","cherry pie","blueberry pie"},
-	["What is an enemy in Minecraft"] = {"enderman","creeper","skeleton","zombie","spider"},
-	["What is something you would find in a hospital"] = {"stethoscope","defibrillator","wheelchair","x ray","doctor","nurse","bed"},
-	["Name a farm animal"] = {"rooster","turkey","chicken","horse","sheep","cow","pig"},
-	["What is one popular battle royale"] = {"playerunknowns battlegrounds","apex legends","warzone","fortnite","pubg"},
-	["Name a superpower"] = {"telepathy","telekinesis","invisibility","super strength","flying"},
-	["Name an anime"] = {"fullmetal alchemist","attack on titan","dragonball z","naruto","pokemon"},
-	["Name a family member"] = {"grandmother","grandfather","brother","sister","mother","father"},
-	["Name a character from the mario franchise"] = {"princess peach","bowser","toad","yoshi","luigi","mario"},
-	["What is one type of natural disaster?"] = {"volcanic eruption","earthquake","hurricane","tsunami","tornado"},
-	["Name one of the seven dwarfs"] = {"grumpy","sneezy","bashful","sleepy","dopey","happy","doc"},
-	["Name a flying vehicle"] = {"space shuttle","helicopter","hot air balloon","airplane","rocket"},
-	["Name a dog breed"] = {"golden retriever","german shepherd","labrador","poodle","bulldog","husky"},
-	["Name a soda brand"] = {"mountain dew","sprite","pepsi","fanta","coke"},
-	["What is one room in a house"] = {"living room","bedroom","bathroom","kitchen","dining room"},
-	["What is something that goes on cake?"] = {"whipped cream","chocolate frosting","sprinkles","frosting","cream"},
-	["Name an emotion"] = {"happiness","sadness","excitement","jealousy","angry","happy","sad"},
-	["Name a video game genre"] = {"role playing game","first person shooter","battle royale","platformer","strategy"},
-	["What is something you would find in a shed"] = {"lawnmower","wheelbarrow","gardening tools","shovel","rake"},
-	["Name a spice"] = {"cinnamon","turmeric","cardamom","paprika","pepper","salt"},
-	["What is something you can climb?"] = {"mountain","climbing wall","ladder","stairs","tree"},
-	["What is one pizza topping?"] = {"mozzarella cheese","pepperoni","mushrooms","cheese","olives"},
-	["What is something that's red?"] = {"strawberry","tomato","apple","blood","rose","fire"},
-	["Name a type of tree"] = {"sequoia","weeping willow","sycamore","oak","pine","birch"},
-	["Name a type of hat"] = {"cowboy hat","baseball cap","fedora","top hat","beanie"},
-	["Name one of the seven deadly sins"] = {"gluttony","sloth","envy","greed","pride","wrath","lust"},
-	["What is something that's purple"] = {"eggplant","amethyst","lavender","grapes","plum"},
-	["Name a vital organ"] = {"pancreas","kidney","lungs","liver","brain","heart"},
-	["What is one job at school"] = {"principal","counselor","librarian","teacher","janitor"},
-	["Name a berry"] = {"blackberry","raspberry","strawberry","blueberry","gooseberry"},
-	["Name a rodent"] = {"hamster","squirrel","chipmunk","rabbit","mouse","rat"},
-	["Name a type of nut"] = {"macadamia","pistachio","hazelnut","walnut","almond","peanut"},
-	["what is something you would find in a bathroom"] = {"toothbrush","shampoo","toilet paper","shower","toilet","sink"},
-	["Name a piece of armor"] = {"breastplate","shoulder pad","helmet","shield","chainmail"},
-	["Name a fruit"] = {"watermelon","pineapple","strawberry","mango","apple","orange","banana"},
-	["Name a scooby doo character"] = {"scrappy doo","scooby doo","velma","shaggy","daphne","fred"},
-	["Name a musical instrument"] = {"saxophone","trombone","trumpet","violin","guitar","piano","drums"},
-	["Name a popular MUSIC streaming service"] = {"apple music","amazon music","tidal","spotify","pandora"},
-	["What is one type of milk?"] = {"chocolate milk","almond milk","oat milk","skim","whole"},
-	["Name a kitchen utensil"] = {"measuring cup","colander","spatula","whisk","ladle","knife","spoon"},
-	["Name an arts & crafts item"] = {"paintbrush","watercolors","glue gun","scissors","markers","pencil"},
-	["Name a popular pizza topping"] = {"mozzarella cheese","pepperoni","mushrooms","sausage","olives"},
-	["Name a character from Phineas and Ferb"] = {"doofenshmirtz","candace","isabella","ferb","phineas"},
-	["Name something found on a playground"] = {"merry go round","climbing wall","basketball hoop","swings","slide"},
-	["Name a character from the Toy Story series"] = {"buzz lightyear","jessie","rex","woody","hamm"},
-	["Name any popular animal that starts with the letter C"] = {"chimpanzee","crocodile","chameleon","cheetah","cobra"},
-	["Name something you wear on your torso (upper body)"] = {"sweatshirt","hoodie","jacket","tshirt","shirt"},
-	["Name a natural hair color"] = {"strawberry blonde","brunette","blonde","auburn","black","brown"},
-	["Name any popular animal that starts with the letter D"] = {"dragonfly","dolphin","donkey","dog","deer","duck"},
-	["Name a type of soup"] = {"french onion soup","chicken noodle","tomato soup","minestrone","clam chowder"},
-	["Name a famous American football player"] = {"peyton manning","jerry rice","tom brady","joe montana"},
-	["Name a well-known tropical fruit"] = {"dragon fruit","passion fruit","pineapple","mango","papaya","guava"},
-	["Name part of a bed"] = {"headboard","footboard","mattress","bedframe","pillow","sheet"},
-	["Name something you drink out of"] = {"thermos","water bottle","coffee mug","cup","glass"},
-	["Name a vegetable kids don't like to eat"] = {"brussel sprouts","broccoli","asparagus","spinach","peas"},
-	["Name something you do when you are sick"] = {"drink medicine","blow your nose","take medicine","rest","sleep"},
-	["Name an insect that can fly"] = {"dragonfly","butterfly","bumblebee","mosquito","firefly","fly"},
-	["Name something you would put in a bath"] = {"bubble bath","bath bomb","essential oils","soap","shampoo"},
-	["What is something you use your hands to eat?"] = {"hamburger","chicken wings","pizza","sandwich","taco"},
-	["Name a character from Frozen"] = {"kristoff","hans","olaf","anna","elsa"},
-	['Name a common girl\'s name starting with the letter "C"'] = {"clementine","christiana","charlotte","claire","chloe"},
-	['Name a common girl\'s name starting with the letter "F"'] = {"francesca","florence","felicity","faith","fiona"},
-	['Name a common girl\'s name starting with the letter "D"'] = {"dorothy","destiny","delaney","diana","daisy"},
-	['Name a common boy\'s name starting with the letter "A"'] = {"alexander","anthony","andrew","austin","adam"},
-	["Name any web browser app"] = {"microsoft edge","google chrome","mozilla firefox","safari","opera"},
-	["Name a green fruit"] = {"honeydew melon","kiwi","green apple","lime","avocado"},
-	["Name a summer Olympic sport"] = {"synchronized swimming","water polo","swimming","cycling","gymnastics"},
-	["Name a fashion brand"] = {"versace","burberry","gucci","prada","chanel"},
-	["Name a popular video game"] = {"grand theft auto","call of duty","minecraft","fortnite","roblox"},
-	["Name a place you can swim"] = {"swimming pool","water park","lake","ocean","river","pool"},
-	["Name a well-known children's card game"] = {"go fish","old maid","war","uno","snap"},
-	["Name something you would find in a backpack"] = {"water bottle","notebooks","calculator","pencil","books"},
-	["Name Something Associated with Weddings"] = {"wedding dress","wedding cake","engagement ring","bouquet","vows"},
-	["Name a Country With a Large Population"] = {"indonesia","pakistan","brazil","india","china"},
-	["Name a cat breed"] = {"ragamuffin","persian","siamese","bengal","ragdoll","tabby"},
-	["Name a style of dance"] = {"breakdancing","ballroom","salsa","tango","ballet","hip hop"},
-	["Name a popular female actress"] = {"jennifer lawrence","angelina jolie","scarlett johansson","meryl streep"},
-	["Name any popular coffee shop"] = {"dunkin donuts","costa coffee","starbucks","tim hortons"},
-	["Name a reason you would wake up in the middle of the night"] = {"sleep walking","bad dream","nightmare","thirsty","noise"},
-	["Name a popular dessert"] = {"chocolate lava cake","tiramisu","cheesecake","brownies","ice cream"},
-	["Name a food that starts with the letter P"] = {"peanut butter","pepperoni","pineapple","pancakes","pizza","pasta","pie"},
-	["Name a popular type of snack food"] = {"potato chips","pretzels","popcorn","crackers","chips"},
-	["Name a snow sport"] = {"snowboarding","cross country skiing","ski jumping","skiing","sledding"},
-	["Name a large animal you would find in the ocean"] = {"humpback whale","great white shark","blue whale","whale shark","dolphin"},
-	["Name a popular brand of electronic devices"] = {"microsoft","samsung","sony","apple","google"},
-	["Name Something Associated with Vampires"] = {"coffin","blood sucking","cape","fangs","bat","garlic"},
-	["Name a flu symptom"] = {"sore throat","runny nose","headache","cough","fever","chills"},
-	["Name a type of seafood"] = {"lobster","crab","scallops","salmon","shrimp","tuna"},
-	["Name a Poptart flavor"] = {"brown sugar cinnamon","blueberry","strawberry","cherry","smores"},
-	["Name a well-known national park"] = {"yellowstone","grand canyon","yosemite"},
-	["Name something you would store in the freezer"] = {"frozen vegetables","ice cream","popsicles","meat","ice"},
-	["Name something associated with baseball"] = {"baseball bat","pitcher","catcher","glove","base","ball","bat"},
-	["Name one of Santa's reindeer?"] = {"dasher","dancer","prancer","vixen","comet","cupid","rudolph","donner","blitzen"},
-	["Name something you bring to a sleepover"] = {"sleeping bag","toothbrush","pajamas","pillow","blanket"},
-	["What is one country in Asia?"] = {"turkmenistan","afghanistan","uzbekistan","kazakhstan","china","japan","india"},
-	["Name a type of bear"] = {"grizzly bear","polar bear","black bear","panda bear","kodiak bear","grizzly"},
-	["Name a cereal brand"] = {"lucky charms","frosted flakes","cocoa puffs","cheerios","kelloggs"},
-	["Name any capital city in Europe (only the city name)"] = {"amsterdam","stockholm","brussels","vienna","berlin","paris","rome"},
-	["Name something associated with a princess"] = {"glass slipper","fairy godmother","tiara","castle","prince","crown"},
-	["Name an amphibian"] = {"salamander","axolotl","newt","toad","frog"},
-	["Name something associated with Superman"] = {"kryptonite","lois lane","metropolis","clark kent","cape","fly"},
-	["Name a well-known river"] = {"mississippi river","amazon river","nile river","yangtze","amazon","nile"},
-	["Name something you would find in a cave"] = {"stalactites","stalagmites","bats","crystals","rock"},
-	["Name a type of reptile"] = {"crocodile","chameleon","komodo dragon","iguana","gecko","snake","lizard"},
-	["Name a water sport"] = {"synchronized swimming","water polo","wakeboarding","surfing","kayaking","swimming"},
-	["Name a Norse god"] = {"freya","odin","loki","thor"},
-	["Name something you would find in a garden"] = {"sunflower","wheelbarrow","watering can","flower","roses"},
-	["Who is one character from the Harry Potter series"] = {"hermione granger","dumbledore","voldemort","ron weasley","harry"},
-	["Name something you would see on the road"] = {"traffic light","speed bump","street light","crosswalk","car"},
-	["Name something that comes in pairs"] = {"chopsticks","earrings","cufflinks","gloves","socks","shoes"},
-	["Name something you would find on the road"] = {"traffic light","speed bump","pothole","crosswalk","car"},
-	["Name something associated with baseball"] = {"baseball bat","baseball glove","pitcher","home run","bat"},
-	["Name a type of dominus"] = {"empyreus","frigidus","aureus"},
+If files do not appear, copy the console output or clipboard fallback.
+]]
+
+local VERSION = "v15-delta-dump"
+local JsonLogFile = "dq_delta_dump.jsonl"
+local SummaryFile = "dq_delta_summary.txt"
+
+local SecurityPolicy = {
+    AllowOriginalVM = false,
+    AllowKeySystem = false,
+    AllowExternalHttp = false,
+    AllowDiscordWebhook = false,
+    AllowDashboardTelemetry = false,
+    AllowQueueOnTeleport = false,
+    AllowExternalUILoad = false,
+    AllowGameRemotes = false,
+    DryRun = true,
 }
 
-local function normalize(q)
-	return q:lower():gsub("%s+", " "):gsub("^%s*(.-)%s*$", "%1"):gsub("[%p%c]", "")
+local Events = {}
+
+local function getType(v)
+    if typeof then
+        local ok, result = pcall(typeof, v)
+        if ok then return result end
+    end
+    return type(v)
 end
 
-local function findAnswers(question)
-	local nq = normalize(question)
-	-- Exact match
-	for q, a in pairs(answers) do
-		if nq == normalize(q) then
-			return a
-		end
-	end
-	-- Fuzzy match
-	local bestList, bestScore = nil, 0
-	for q, a in pairs(answers) do
-		local score = 0
-		for word in nq:gmatch("%S+") do
-			if #word > 2 and normalize(q):find(word, 1, true) then
-				score += 1
-			end
-		end
-		if score > bestScore then
-			bestScore = score
-			bestList = a
-		end
-	end
-	if bestScore >= 2 then return bestList end
-	return nil
+local function jsonEscape(s)
+    s = tostring(s)
+    s = s:gsub("\\", "\\\\")
+         :gsub('"', '\\"')
+         :gsub("\n", "\\n")
+         :gsub("\r", "\\r")
+         :gsub("\t", "\\t")
+    return s
 end
 
--- Track which answer worked
-local PendingQuestion = nil
-local PendingQuestion = nil
-local PendingAnswerIndex = nil
-local PendingAnswerList = nil
-
-CoinEvent.OnClientEvent:Connect(function()
-	if PendingQuestion and PendingAnswerIndex then
-		local answer = PendingAnswerList[PendingAnswerIndex]
-		local q = PendingQuestion
-		table.insert(Log.correct, {q = q, a = answer})
-		print("[LOG] ✓ CORRECT: '" .. answer .. "' for: " .. q)
-		SendWebhook("✅ **CORRECT** | `" .. answer .. "` (" .. #answer .. " chars)\n**Q:** " .. q)
-		PendingQuestion = nil
-		PendingAnswerIndex = nil
-		PendingAnswerList = nil
-		Answering = false
-	end
-end)
-
-QuestionEvent.OnClientEvent:Connect(function(question)
-	if type(question) ~= "string" or question == "Close" or #question < 3 then return end
-	if Answering then return end
-	Answering = true
-
-	task.spawn(function()
-		task.wait(0.5)
-		local q = QuestionLabel.Text
-
-		if not Log.seen[q] then
-			Log.seen[q] = true
-			print("[LOG] NEW QUESTION: " .. q)
-			SendWebhook("🔵 **NEW QUESTION SEEN**\n**Q:** " .. q)
-		end
-
-		local list = findAnswers(q)
-		if not list then
-			print("[LOG] ? UNKNOWN: " .. q)
-			table.insert(Log.unknown, q)
-			SendWebhook("❓ **NO DICTIONARY MATCH**\n**Q:** " .. q)
-			Answering = false
-			return
-		end
-
-		local tried = {}
-		for i, answer in ipairs(list) do
-			if not Answering then break end
-			PendingQuestion = q
-			PendingAnswerIndex = i
-			PendingAnswerList = list
-			table.insert(tried, answer)
-
-			print("[LOG] Trying (" .. i .. "/" .. #list .. "): '" .. answer .. "'")
-			AnswerFunction:InvokeServer(answer, q)
-			task.wait(0.8)
-
-			if not PendingQuestion then break end
-
-			table.insert(Log.failed, {q = q, a = answer})
-			print("[LOG] ✗ Failed: '" .. answer .. "'")
-		end
-
-		if PendingQuestion then
-			print("[LOG] ✗ ALL FAILED for: " .. q)
-			SendWebhook("❌ **ALL ANSWERS FAILED**\n**Q:** " .. q .. "\n**Tried:** `" .. table.concat(tried, ", ") .. "`")
-			PendingQuestion = nil
-			PendingAnswerIndex = nil
-			PendingAnswerList = nil
-		end
-
-		task.wait(1)
-		Answering = false
-	end)
-end)
-
-_G.PrintAnswerLog = function()
-	print("\n===== ANSWER LOG =====")
-	print("CORRECT:")
-	for _, v in ipairs(Log.correct) do print("  ✓ [" .. v.q .. "] = " .. v.a) end
-	print("FAILED:")
-	for _, v in ipairs(Log.failed) do print("  ✗ [" .. v.q .. "] = " .. v.a) end
-	print("UNKNOWN:")
-	for _, v in ipairs(Log.unknown) do print("  ? " .. v) end
-	print("======================\n")
+local function fallbackJson(v, depth, seen)
+    depth = depth or 0
+    seen = seen or {}
+    if depth > 5 then return '"<max_depth>"' end
+    local t = getType(v)
+    if t == "nil" then return "null" end
+    if t == "number" or t == "boolean" then return tostring(v) end
+    if t == "string" then return '"' .. jsonEscape(v) .. '"' end
+    if t == "table" then
+        if seen[v] then return '"<cycle>"' end
+        seen[v] = true
+        local parts = {}
+        local isArray = true
+        local maxIndex = 0
+        for k in pairs(v) do
+            if type(k) ~= "number" then isArray = false break end
+            if k > maxIndex then maxIndex = k end
+        end
+        if isArray then
+            for i = 1, maxIndex do
+                table.insert(parts, fallbackJson(v[i], depth + 1, seen))
+            end
+            return "[" .. table.concat(parts, ",") .. "]"
+        end
+        for k, val in pairs(v) do
+            table.insert(parts, fallbackJson(tostring(k), depth + 1, seen) .. ":" .. fallbackJson(val, depth + 1, seen))
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+    end
+    return '"' .. jsonEscape("<" .. tostring(t) .. ":" .. tostring(v) .. ">") .. '"'
 end
 
-_G.DumpLogToWebhook = function()
-	local lines = {"📊 **FULL SESSION LOG**\n"}
-	table.insert(lines, "**✅ Correct:**")
-	for _, v in ipairs(Log.correct) do
-		table.insert(lines, "`" .. v.a .. "` → " .. v.q)
-	end
-	table.insert(lines, "\n**❌ All Failed:**")
-	for _, v in ipairs(Log.unknown) do
-		table.insert(lines, "? " .. v)
-	end
-	-- Split into chunks of 1900 chars (Discord limit is 2000)
-	local chunk = ""
-	for _, line in ipairs(lines) do
-		if #chunk + #line > 1900 then
-			SendWebhook(chunk)
-			chunk = ""
-			task.wait(1)
-		end
-		chunk = chunk .. line .. "\n"
-	end
-	if #chunk > 0 then SendWebhook(chunk) end
-	print("[LOG] Full log sent to webhook.")
+local function encodeJson(v)
+    local ok, http = pcall(function()
+        return game and game:GetService("HttpService")
+    end)
+    if ok and http and http.JSONEncode then
+        local ok2, encoded = pcall(function()
+            return http:JSONEncode(v)
+        end)
+        if ok2 then return encoded end
+    end
+    return fallbackJson(v)
 end
 
-print("[AutoAnswer] Loaded. Webhook logging active. Run _G.DumpLogToWebhook() for full session dump.")
+local function canCallGlobal(name)
+    local ok, value = pcall(function()
+        return getgenv and getgenv()[name] or _G[name]
+    end)
+    return ok and value ~= nil, value
+end
+
+local function appendLine(path, line)
+    if appendfile then
+        local ok = pcall(function()
+            appendfile(path, line .. "\n")
+        end)
+        if ok then return true end
+    end
+
+    if writefile and readfile and isfile then
+        local ok = pcall(function()
+            local old = ""
+            if isfile(path) then old = readfile(path) end
+            writefile(path, old .. line .. "\n")
+        end)
+        if ok then return true end
+    end
+
+    return false
+end
+
+local function writeText(path, text)
+    if writefile then
+        local ok = pcall(function()
+            writefile(path, text)
+        end)
+        return ok
+    end
+    return false
+end
+
+local function event(kind, data)
+    local item = {
+        version = VERSION,
+        time = os and os.time and os.time() or 0,
+        kind = tostring(kind),
+        data = data or {},
+    }
+
+    table.insert(Events, item)
+
+    local line = encodeJson(item)
+    appendLine(JsonLogFile, line)
+    print("[DQ Delta Dump]", kind, line)
+    return item
+end
+
+local function blocked(name, reason, data)
+    return event("blocked", {
+        name = tostring(name),
+        reason = reason or "blocked by dry-run policy",
+        data = data or {},
+    })
+end
+
+local function functionExists(name)
+    local ok, value = canCallGlobal(name)
+    return ok, getType(value)
+end
+
+local function safeService(name)
+    local ok, service = pcall(function()
+        return game:GetService(name)
+    end)
+    if ok and service then
+        event("service_available", { name = name, className = service.ClassName })
+        return service
+    end
+    event("service_unavailable", { name = name })
+    return nil
+end
+
+local function detectExecutor()
+    local names = {
+        "identifyexecutor",
+        "getexecutorname",
+    }
+
+    for _, fnName in ipairs(names) do
+        local exists, fn = canCallGlobal(fnName)
+        if exists and type(fn) == "function" then
+            local ok, a, b = pcall(fn)
+            event("executor_identity", {
+                functionName = fnName,
+                ok = ok,
+                value1 = tostring(a),
+                value2 = tostring(b),
+            })
+            return
+        end
+    end
+
+    event("executor_identity", {
+        ok = false,
+        value1 = "unknown",
+    })
+end
+
+local function capabilityDump()
+    local globals = {
+        "writefile", "readfile", "appendfile", "isfile", "isfolder", "makefolder", "listfiles",
+        "getgenv", "getsenv", "getrenv", "getgc", "hookfunction", "hookmetamethod",
+        "setreadonly", "isreadonly", "checkcaller",
+        "request", "http_request", "syn", "queue_on_teleport", "setclipboard",
+        "loadstring",
+    }
+
+    for _, name in ipairs(globals) do
+        local exists, t = functionExists(name)
+        event("capability", {
+            name = name,
+            exists = exists,
+            valueType = t,
+            note = "existence check only; not called unless harmless",
+        })
+    end
+end
+
+local function fileSystemTest()
+    local canWrite = writeText(JsonLogFile, "")
+    event("filesystem_test", {
+        writefile = writefile ~= nil,
+        appendfile = appendfile ~= nil,
+        readfile = readfile ~= nil,
+        isfile = isfile ~= nil,
+        canWriteLog = canWrite,
+        jsonLogFile = JsonLogFile,
+        summaryFile = SummaryFile,
+    })
+
+    if writefile then
+        local ok = pcall(function()
+            writefile("dq_delta_fs_test.txt", "ok")
+        end)
+        event("filesystem_write_test", { ok = ok, path = "dq_delta_fs_test.txt" })
+    end
+end
+
+local Network = {}
+
+function Network.request(payload)
+    return blocked("request", "external HTTP disabled; not sent", payload)
+end
+
+function Network.httpGet(url)
+    return blocked("HttpGet", "external loader disabled; not fetched", { url = url })
+end
+
+function Network.discordWebhook(payload)
+    return blocked("discord_webhook", "Discord webhook disabled; not sent", payload)
+end
+
+function Network.dashboard(payload)
+    return blocked("dashboard_telemetry", "Vercel/dashboard telemetry removed; not sent", payload)
+end
+
+function Network.queueOnTeleport(code)
+    return blocked("queue_on_teleport", "teleport persistence disabled; not queued", {
+        preview = tostring(code):sub(1, 180)
+    })
+end
+
+local Remotes = {}
+
+local function remoteStub(name, ...)
+    local args = { ... }
+    return event("remote_stub", {
+        name = tostring(name),
+        argc = #args,
+        args = args,
+        fired = false,
+        reason = "AllowGameRemotes=false; no FireServer/InvokeServer called",
+    })
+end
+
+function Remotes.vote(...) return remoteStub("vote", ...) end
+function Remotes.PlaySolo(...) return remoteStub("PlaySolo", ...) end
+function Remotes.ReturnToLobby(...) return remoteStub("ReturnToLobby", ...) end
+function Remotes.RetryVote(...) return remoteStub("RetryVote", ...) end
+function Remotes.changeStartValue(...) return remoteStub("changeStartValue", ...) end
+function Remotes.CreateParty(...) return remoteStub("CreateParty", ...) end
+function Remotes.GetPlayerParty(...) return remoteStub("GetPlayerParty", ...) end
+function Remotes.HandleJoinRequest(...) return remoteStub("HandleJoinRequest", ...) end
+function Remotes.KickMember(...) return remoteStub("KickMember", ...) end
+function Remotes.StartParty(...) return remoteStub("StartParty", ...) end
+function Remotes.JoinParty(...) return remoteStub("JoinParty", ...) end
+function Remotes.reloadInvy(...) return remoteStub("reloadInvy", ...) end
+function Remotes.sellItemEvent(...) return remoteStub("sellItemEvent", ...) end
+function Remotes.HandleEnemy(...) return remoteStub("HandleEnemy", ...) end
+function Remotes.WeaponAttack(...) return remoteStub("Weapon.Attack", ...) end
+function Remotes.spellEvent(...) return remoteStub("spellEvent", ...) end
+function Remotes.abilityEvent(...) return remoteStub("abilityEvent", ...) end
+function Remotes.localEvent(...) return remoteStub("localEvent", ...) end
+
+local function createSmallGui()
+    local ok, err = pcall(function()
+        local players = game:GetService("Players")
+        local player = players.LocalPlayer
+        local parent = player and player:FindFirstChildOfClass("PlayerGui")
+        if not parent then return end
+
+        local old = parent:FindFirstChild("DQDeltaDump")
+        if old then old:Destroy() end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "DQDeltaDump"
+        gui.ResetOnSpawn = false
+        gui.Parent = parent
+
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, 460, 0, 170)
+        frame.Position = UDim2.new(0, 20, 0, 120)
+        frame.BackgroundColor3 = Color3.fromRGB(22, 24, 32)
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = frame
+
+        local text = Instance.new("TextLabel")
+        text.BackgroundTransparency = 1
+        text.Position = UDim2.new(0, 14, 0, 12)
+        text.Size = UDim2.new(1, -28, 1, -24)
+        text.TextXAlignment = Enum.TextXAlignment.Left
+        text.TextYAlignment = Enum.TextYAlignment.Top
+        text.TextWrapped = true
+        text.Font = Enum.Font.Gotham
+        text.TextSize = 13
+        text.TextColor3 = Color3.fromRGB(230, 235, 255)
+        text.Text = "DQ Delta dry-run dump complete or running.\nNo original VM executed.\nNo HTTP/webhooks/remotes fired.\nUpload dq_delta_dump.jsonl and dq_delta_summary.txt."
+        text.Parent = frame
+    end)
+
+    event("local_gui", {
+        ok = ok,
+        error = tostring(err),
+    })
+end
+
+local function policyDump()
+    for k, v in pairs(SecurityPolicy) do
+        event("security_policy", {
+            key = k,
+            value = v,
+        })
+    end
+end
+
+local function dryRunFeatureFlow()
+    -- Proves the clean behavior paths are log-only.
+    Network.httpGet("https://sirius.menu/rayfield")
+    Network.request({ Url = "https://nihility-dashboard-wqvy.vercel.app/api/update-account", Method = "POST" })
+    Network.discordWebhook({ title = "Ultimate Drop", note = "not sent" })
+    Network.dashboard({ username = "DRY_RUN", level = 0 })
+    Network.queueOnTeleport("loadstring(game:HttpGet('external'))()")
+
+    Remotes.PlaySolo("DRY_RUN_DUNGEON", "DRY_RUN_DIFFICULTY")
+    Remotes.vote("BonusBoss", true)
+    Remotes.RetryVote(true)
+    Remotes.CreateParty({ visibility = "Private", mode = "Carry" })
+    Remotes.HandleJoinRequest("DRY_RUN_PLAYER", true)
+    Remotes.KickMember("DRY_RUN_PLAYER")
+    Remotes.reloadInvy()
+    Remotes.sellItemEvent("DRY_RUN_ITEM")
+    Remotes.HandleEnemy("DRY_RUN_ENEMY")
+    Remotes.WeaponAttack("DRY_RUN_ENEMY")
+    Remotes.spellEvent("DRY_RUN_SKILL", "DRY_RUN_ENEMY")
+    Remotes.abilityEvent("DRY_RUN_ABILITY", "DRY_RUN_ENEMY")
+    Remotes.localEvent("skill", "DRY_RUN_SLOT", "DRY_RUN_ENEMY")
+end
+
+local function writeSummary()
+    local lines = {}
+    table.insert(lines, "DQ Delta Dump Summary")
+    table.insert(lines, "Version: " .. VERSION)
+    table.insert(lines, "Events: " .. tostring(#Events))
+    table.insert(lines, "Security:")
+    for k, v in pairs(SecurityPolicy) do
+        table.insert(lines, "- " .. tostring(k) .. " = " .. tostring(v))
+    end
+    table.insert(lines, "")
+    table.insert(lines, "Expected upload files:")
+    table.insert(lines, "- " .. JsonLogFile)
+    table.insert(lines, "- " .. SummaryFile)
+    table.insert(lines, "")
+    table.insert(lines, "This dump did not execute the original obfuscated DQ script.")
+    table.insert(lines, "This dump did not fire game remotes or send HTTP/webhooks.")
+
+    local summary = table.concat(lines, "\n")
+    local wrote = writeText(SummaryFile, summary)
+
+    if not wrote and setclipboard then
+        pcall(function()
+            setclipboard(summary)
+        end)
+        event("summary_clipboard_fallback", { used = true })
+    end
+
+    event("summary_written", {
+        path = SummaryFile,
+        wroteFile = wrote,
+    })
+end
+
+local function main()
+    fileSystemTest()
+    event("start", {
+        version = VERSION,
+        placeId = game and game.PlaceId or nil,
+        gameId = game and game.GameId or nil,
+        jobId = game and game.JobId or nil,
+    })
+
+    detectExecutor()
+    policyDump()
+    capabilityDump()
+
+    safeService("Players")
+    safeService("ReplicatedStorage")
+    safeService("Workspace")
+    safeService("HttpService")
+    safeService("TeleportService")
+
+    dryRunFeatureFlow()
+    createSmallGui()
+    writeSummary()
+
+    event("complete", {
+        jsonLogFile = JsonLogFile,
+        summaryFile = SummaryFile,
+        totalEvents = #Events,
+    })
+
+    print("[DQ Delta Dump] Done. Upload dq_delta_dump.jsonl and dq_delta_summary.txt")
+end
+
+main()
+
+return {
+    SecurityPolicy = SecurityPolicy,
+    Events = Events,
+}
