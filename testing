@@ -1,26 +1,22 @@
 --[[
-Nihility Hub Dungeon Quest - Clean Delta-Safe Rebuild v17
+Nihility Hub Dungeon Quest - Clean Delta-Safe Rebuild v18
 
-This is a safe reconstruction/testing base.
-It does NOT include or execute the original obfuscated VM.
-It does NOT fetch external libraries.
-It does NOT send HTTP/webhooks/dashboard telemetry.
-It does NOT queue code on teleport.
-It does NOT FireServer/InvokeServer game remotes.
+Purpose:
+- safer clean source package after successful v17 log
+- interactive local UI, config/log export, payload builders
+- original VM/key system/webhooks/Vercel/Rayfield/queue_on_teleport removed
+- game remotes remain stubs only
 
-v17 adds:
-- interactive local UI panel
-- local config save/load test buttons
-- local payload builder test buttons
-- local module dry-run buttons
-- exported JSONL logs
+This does NOT run the original obfuscated DQ payload.
+This does NOT send HTTP/webhooks.
+This does NOT FireServer/InvokeServer.
 
-Original source evidence SHA-256:
+Original source SHA-256:
 9dd02526bb114b9a3496b541712705652dd1e51645a116de265d35e918b5856b
 ]]
 
 local Hub = {}
-Hub.Version = "v17-delta-safe-clean"
+Hub.Version = "v18-delta-safe-clean"
 
 Hub.SecurityPolicy = {
     AllowOriginalVM = false,
@@ -36,23 +32,22 @@ Hub.SecurityPolicy = {
 
 Hub.StaticEvidence = {
     SourceSha256 = "9dd02526bb114b9a3496b541712705652dd1e51645a116de265d35e918b5856b",
-    V16LogEvents = 35,
+    V17LogEvents = 44,
     RecoveredActionSymbols = {
-        ["CreateParty"] = { cluster = "party_carry", evidenceRows = 5, deltaV16StubHits = 1, locations = "p70:pc115, p70:pc130, p70:pc166, p116:pc5, p116:pc10" },
-        ["GetPlayerParty"] = { cluster = "party_carry", evidenceRows = 2, deltaV16StubHits = 0, locations = "p70:pc151, p70:pc155" },
-        ["HandleEnemy"] = { cluster = "delta_v16_confirmed_stub", evidenceRows = 0, deltaV16StubHits = 1, locations = "" },
-        ["HandleJoinRequest"] = { cluster = "party_carry", evidenceRows = 3, deltaV16StubHits = 1, locations = "p72:pc44, p103:pc36, p103:pc38" },
-        ["JoinParty"] = { cluster = "party_carry", evidenceRows = 2, deltaV16StubHits = 0, locations = "p92:pc10, p108:pc17" },
-        ["KickMember"] = { cluster = "party_carry", evidenceRows = 5, deltaV16StubHits = 1, locations = "p101:pc4, p104:pc4, p105:pc4, p106:pc4, p108:pc4" },
-        ["PlaySolo"] = { cluster = "delta_v16_confirmed_stub", evidenceRows = 0, deltaV16StubHits = 1, locations = "" },
-        ["RetryVote"] = { cluster = "delta_v16_confirmed_stub", evidenceRows = 0, deltaV16StubHits = 1, locations = "" },
-        ["Weapon"] = { cluster = "combat_killaura_skills", evidenceRows = 5, deltaV16StubHits = 0, locations = "p97:pc557, p129:pc32, p131:pc45, p131:pc301, p132:pc45" },
-        ["Weapon.Attack"] = { cluster = "delta_v16_confirmed_stub", evidenceRows = 0, deltaV16StubHits = 1, locations = "" },
-        ["abilityEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, deltaV16StubHits = 1, locations = "p81:pc17" },
-        ["localEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, deltaV16StubHits = 1, locations = "p81:pc17" },
-        ["reloadInvy"] = { cluster = "delta_v16_confirmed_stub", evidenceRows = 0, deltaV16StubHits = 1, locations = "" },
-        ["spellEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, deltaV16StubHits = 1, locations = "p81:pc16" },
-        ["vote"] = { cluster = "dungeon_join_retry", evidenceRows = 11, deltaV16StubHits = 1, locations = "p55:pc33, p77:pc7, p131:pc7, p131:pc519, p145:pc7, p146:pc1287, p146:pc1799, p152:pc7" },
+        ["CreateParty"] = { cluster = "party_carry", evidenceRows = 5, v17StubHits = 1, locations = "p70:pc115, p70:pc130, p70:pc166, p116:pc5, p116:pc10" },
+        ["GetPlayerParty"] = { cluster = "party_carry", evidenceRows = 2, v17StubHits = 0, locations = "p70:pc151, p70:pc155" },
+        ["HandleEnemy"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 2, locations = "" },
+        ["HandleJoinRequest"] = { cluster = "party_carry", evidenceRows = 3, v17StubHits = 1, locations = "p72:pc44, p103:pc36, p103:pc38" },
+        ["JoinParty"] = { cluster = "party_carry", evidenceRows = 2, v17StubHits = 0, locations = "p92:pc10, p108:pc17" },
+        ["KickMember"] = { cluster = "party_carry", evidenceRows = 5, v17StubHits = 1, locations = "p101:pc4, p104:pc4, p105:pc4, p106:pc4, p108:pc4" },
+        ["PlaySolo"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 1, locations = "" },
+        ["Weapon"] = { cluster = "combat_killaura_skills", evidenceRows = 5, v17StubHits = 0, locations = "p97:pc557, p129:pc32, p131:pc45, p131:pc301, p132:pc45" },
+        ["Weapon.Attack"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 2, locations = "" },
+        ["abilityEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, v17StubHits = 1, locations = "p81:pc17" },
+        ["localEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, v17StubHits = 1, locations = "p81:pc17" },
+        ["reloadInvy"] = { cluster = "v17_stub_confirmed", evidenceRows = 0, v17StubHits = 1, locations = "" },
+        ["spellEvent"] = { cluster = "combat_killaura_skills", evidenceRows = 1, v17StubHits = 1, locations = "p81:pc16" },
+        ["vote"] = { cluster = "dungeon_join_retry", evidenceRows = 11, v17StubHits = 1, locations = "p55:pc33, p77:pc7, p131:pc7, p131:pc519, p145:pc7, p146:pc1287, p146:pc1799, p152:pc7" },
     },
 }
 
@@ -85,30 +80,22 @@ Hub.Config = {
     SendDropWebhook = false,
 }
 
-Hub.Runtime = {
-    Log = {},
-    Gui = nil,
-    StatusText = nil,
-}
-
-local LogFile = "dq_clean_v17_log.jsonl"
+Hub.Runtime = { Log = {}, Gui = nil, StatusText = nil }
+local LogFile = "dq_clean_v18_log.jsonl"
+local SummaryFile = "dq_clean_v18_summary.txt"
 
 local function typeofSafe(v)
-    if typeof then
-        local ok, t = pcall(typeof, v)
-        if ok then return t end
-    end
+    if typeof then local ok, t = pcall(typeof, v); if ok then return t end end
     return type(v)
 end
 
 local function esc(s)
     s = tostring(s)
-    return s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
+    return s:gsub("\\","\\\\"):gsub('"','\\"'):gsub("\n","\\n"):gsub("\r","\\r"):gsub("\t","\\t")
 end
 
-local function fallbackJson(v, depth, seen)
-    depth = depth or 0
-    seen = seen or {}
+local function json(v, depth, seen)
+    depth = depth or 0; seen = seen or {}
     if depth > 6 then return "\"<max_depth>\"" end
     local t = typeofSafe(v)
     if t == "nil" then return "null" end
@@ -124,41 +111,31 @@ local function fallbackJson(v, depth, seen)
         end
         local parts = {}
         if isArray then
-            for i = 1, maxIndex do
-                table.insert(parts, fallbackJson(v[i], depth + 1, seen))
-            end
+            for i = 1, maxIndex do table.insert(parts, json(v[i], depth + 1, seen)) end
             return "[" .. table.concat(parts, ",") .. "]"
         end
         for k, val in pairs(v) do
-            table.insert(parts, fallbackJson(tostring(k), depth + 1, seen) .. ":" .. fallbackJson(val, depth + 1, seen))
+            table.insert(parts, json(tostring(k), depth + 1, seen) .. ":" .. json(val, depth + 1, seen))
         end
         return "{" .. table.concat(parts, ",") .. "}"
     end
     return "\"" .. esc("<" .. tostring(t) .. ":" .. tostring(v) .. ">") .. "\""
 end
 
-local function encodeJson(v)
-    local ok, http = pcall(function()
-        return game:GetService("HttpService")
-    end)
+local function encode(v)
+    local ok, http = pcall(function() return game:GetService("HttpService") end)
     if ok and http and http.JSONEncode then
-        local ok2, encoded = pcall(function()
-            return http:JSONEncode(v)
-        end)
+        local ok2, encoded = pcall(function() return http:JSONEncode(v) end)
         if ok2 then return encoded end
     end
-    return fallbackJson(v)
+    return json(v)
 end
 
-local function appendLine(path, line)
-    if appendfile then
-        local ok = pcall(function() appendfile(path, line .. "\n") end)
-        if ok then return true end
-    end
+local function append(path, line)
+    if appendfile then local ok = pcall(function() appendfile(path, line .. "\n") end); if ok then return true end end
     if writefile and readfile and isfile then
         local ok = pcall(function()
-            local old = ""
-            if isfile(path) then old = readfile(path) end
+            local old = ""; if isfile(path) then old = readfile(path) end
             writefile(path, old .. line .. "\n")
         end)
         if ok then return true end
@@ -167,17 +144,12 @@ local function appendLine(path, line)
 end
 
 function Hub.log(kind, data)
-    local event = {
-        version = Hub.Version,
-        time = os and os.time and os.time() or 0,
-        kind = tostring(kind),
-        data = data or {},
-    }
+    local event = { version = Hub.Version, time = os and os.time and os.time() or 0, kind = tostring(kind), data = data or {} }
     table.insert(Hub.Runtime.Log, event)
-    appendLine(LogFile, encodeJson(event))
-    print("[DQ Clean v17]", kind)
+    append(LogFile, encode(event))
+    print("[DQ Clean v18]", kind)
     if Hub.Runtime.StatusText then
-        Hub.Runtime.StatusText.Text = "Last event: " .. tostring(kind) .. "\nLog file: " .. LogFile .. "\nEvents: " .. tostring(#Hub.Runtime.Log)
+        Hub.Runtime.StatusText.Text = "Last event: " .. tostring(kind) .. "\nEvents: " .. tostring(#Hub.Runtime.Log) .. "\nLog: " .. LogFile .. "\nSummary: " .. SummaryFile
     end
     return event
 end
@@ -191,164 +163,137 @@ function Hub.resetLog()
     Hub.Runtime.Log = {}
 end
 
+function Hub.exportSummary()
+    local lines = {}
+    table.insert(lines, "DQ Clean v18 Summary")
+    table.insert(lines, "Version: " .. Hub.Version)
+    table.insert(lines, "Events: " .. tostring(#Hub.Runtime.Log))
+    table.insert(lines, "OriginalVM: removed")
+    table.insert(lines, "KeySystem: removed")
+    table.insert(lines, "ExternalHTTP: blocked")
+    table.insert(lines, "DiscordWebhook: blocked")
+    table.insert(lines, "DashboardTelemetry: blocked")
+    table.insert(lines, "ExternalRayfield: removed")
+    table.insert(lines, "QueueOnTeleport: blocked")
+    table.insert(lines, "GameRemotes: stubbed only")
+    table.insert(lines, "Upload: " .. LogFile .. " and " .. SummaryFile)
+    local text = table.concat(lines, "\n")
+    if writefile then pcall(function() writefile(SummaryFile, text) end) end
+    return Hub.log("summary_exported", { path = SummaryFile })
+end
+
 function Hub.assertSecurity()
-    local expected = {
-        AllowOriginalVM = false,
-        AllowKeySystem = false,
-        AllowExternalHttp = false,
-        AllowDiscordWebhook = false,
-        AllowDashboardTelemetry = false,
-        AllowQueueOnTeleport = false,
-        AllowExternalUILoad = false,
-        AllowGameRemotes = false,
-        DryRun = true,
-    }
-    for key, value in pairs(expected) do
-        if Hub.SecurityPolicy[key] == value then
-            Hub.log("security_pass", { key = key, value = value })
+    for key, expected in pairs({
+        AllowOriginalVM=false, AllowKeySystem=false, AllowExternalHttp=false,
+        AllowDiscordWebhook=false, AllowDashboardTelemetry=false, AllowQueueOnTeleport=false,
+        AllowExternalUILoad=false, AllowGameRemotes=false, DryRun=true,
+    }) do
+        if Hub.SecurityPolicy[key] == expected then
+            Hub.log("security_pass", {key=key, value=expected})
         else
-            Hub.log("security_fail", { key = key, expected = value, actual = Hub.SecurityPolicy[key] })
+            Hub.log("security_fail", {key=key, expected=expected, actual=Hub.SecurityPolicy[key]})
         end
     end
 end
 
 Hub.KeySystem = nil
-
 Hub.Network = {}
-function Hub.Network.request(payload) return blocked("request", "external HTTP removed", payload) end
-function Hub.Network.httpGet(label) return blocked("HttpGet", "external loader removed", { label = label }) end
-function Hub.Network.sendUserWebhook(payload) return blocked("user_webhook", "Discord webhook disabled", payload) end
-function Hub.Network.sendGlobalUltimateWebhook(payload) return blocked("global_ultimate_webhook", "hardcoded global webhook removed", payload) end
-function Hub.Network.updateDashboardTelemetry(payload) return blocked("dashboard_telemetry", "Vercel/dashboard telemetry removed", payload) end
-function Hub.Network.queueOnTeleport(code) return blocked("queue_on_teleport", "teleport persistence removed", { preview = tostring(code):sub(1, 150) }) end
+function Hub.Network.request(payload) return blocked("request","external HTTP removed",payload) end
+function Hub.Network.httpGet(label) return blocked("HttpGet","external loader removed",{label=label}) end
+function Hub.Network.sendUserWebhook(payload) return blocked("user_webhook","Discord webhook disabled",payload) end
+function Hub.Network.sendGlobalUltimateWebhook(payload) return blocked("global_ultimate_webhook","hardcoded global webhook removed",payload) end
+function Hub.Network.updateDashboardTelemetry(payload) return blocked("dashboard_telemetry","Vercel/dashboard telemetry removed",payload) end
+function Hub.Network.queueOnTeleport(code) return blocked("queue_on_teleport","teleport persistence removed",{preview=tostring(code):sub(1,150)}) end
 
 Hub.ConfigSystem = {}
 function Hub.ConfigSystem.ensureFolder()
     if makefolder and isfolder and not isfolder(Hub.Config.ConfigFolder) then
-        makefolder(Hub.Config.ConfigFolder)
-        Hub.log("config_folder_created", { folder = Hub.Config.ConfigFolder })
+        makefolder(Hub.Config.ConfigFolder); Hub.log("config_folder_created", {folder=Hub.Config.ConfigFolder})
     end
 end
 function Hub.ConfigSystem.sanitized()
     local copy = {}
-    for k, v in pairs(Hub.Config) do
-        if k == "UserWebhookUrl" then copy[k] = "" else copy[k] = v end
-    end
+    for k,v in pairs(Hub.Config) do if k=="UserWebhookUrl" then copy[k]="" else copy[k]=v end end
     return copy
 end
 function Hub.ConfigSystem.save(name)
     name = tostring(name or Hub.Config.ConfigName or "default")
-    if not writefile then return blocked("writefile", "writefile unavailable", { name = name }) end
+    if not writefile then return blocked("writefile","writefile unavailable",{name=name}) end
     Hub.ConfigSystem.ensureFolder()
     local path = Hub.Config.ConfigFolder .. name .. ".json"
-    writefile(path, encodeJson(Hub.ConfigSystem.sanitized()))
-    return Hub.log("config_saved", { path = path, webhookPersisted = false })
+    writefile(path, encode(Hub.ConfigSystem.sanitized()))
+    return Hub.log("config_saved", {path=path, webhookPersisted=false})
 end
 function Hub.ConfigSystem.load(name)
     name = tostring(name or Hub.Config.ConfigName or "default")
     local path = Hub.Config.ConfigFolder .. name .. ".json"
-    if not readfile or not isfile or not isfile(path) then
-        return blocked("readfile", "config missing", { path = path })
-    end
+    if not readfile or not isfile or not isfile(path) then return blocked("readfile","config missing",{path=path}) end
     local raw = readfile(path)
-    return Hub.log("config_loaded_raw", { path = path, bytes = #raw })
+    return Hub.log("config_loaded_raw", {path=path, bytes=#raw})
 end
 
 Hub.Payloads = {}
 function Hub.Payloads.runLog(run)
     run = run or {}
-    return {
-        embeds = {
-            title = run.success and "Dungeon Completed!" or "Dungeon Failed!",
-            fields = {
-                { name = "Player", value = tostring(run.player or "unknown") },
-                { name = "Dungeon", value = tostring(run.dungeon or "unknown") },
-                { name = "Level", value = tostring(run.level or "unknown") },
-                { name = "Gold", value = tostring(run.gold or "unknown") },
-                { name = "Time", value = tostring(run.time or "unknown") },
-                { name = "EXP", value = tostring(run.exp or "unknown") },
-                { name = "Drops", value = tostring(run.drops or "none") },
-            },
-        },
-    }
+    return { embeds = {{ title = run.success and "Dungeon Completed!" or "Dungeon Failed!", fields = {
+        {name="Player", value=tostring(run.player or "unknown")},
+        {name="Dungeon", value=tostring(run.dungeon or "unknown")},
+        {name="Level", value=tostring(run.level or "unknown")},
+        {name="Gold", value=tostring(run.gold or "unknown")},
+        {name="Time", value=tostring(run.time or "unknown")},
+        {name="EXP", value=tostring(run.exp or "unknown")},
+        {name="Drops", value=tostring(run.drops or "none")},
+    } }} }
 end
 function Hub.Payloads.ultimateDrop(item)
-    return {
-        embeds = {
-            title = "Ultimate Drop: " .. tostring(item and (item.Name or item.name) or "unknown"),
-            footer = { text = "Nihility Hub Ultimate Tracker - local only" },
-        },
-    }
+    return { embeds = {{ title = "Ultimate Drop: " .. tostring(item and (item.Name or item.name) or "unknown"), footer = { text = "Nihility Hub Ultimate Tracker - local only" } }} }
 end
 function Hub.onRunFinished(run)
-    local payload = Hub.Payloads.runLog(run)
-    Hub.log("run_payload_built", payload)
+    local payload = Hub.Payloads.runLog(run); Hub.log("run_payload_built", payload)
     if Hub.Config.SendRunWebhook then Hub.Network.sendUserWebhook(payload) end
 end
 function Hub.onUltimateDrop(item)
-    local payload = Hub.Payloads.ultimateDrop(item)
-    Hub.log("ultimate_payload_built", payload)
+    local payload = Hub.Payloads.ultimateDrop(item); Hub.log("ultimate_payload_built", payload)
     if Hub.Config.SendDropWebhook then Hub.Network.sendUserWebhook(payload) end
     Hub.Network.sendGlobalUltimateWebhook(payload)
 end
 function Hub.updateDashboardStats()
-    return Hub.Network.updateDashboardTelemetry({
-        key = "dungeon-quest",
-        username = nil,
-        userId = nil,
-        level = nil,
-        currentExp = nil,
-        maxExp = nil,
-        dungeon = Hub.Config.SelectedDungeon,
-        difficulty = Hub.Config.SelectedDifficulty,
-        room = nil,
-        account = nil,
-    })
+    return Hub.Network.updateDashboardTelemetry({key="dungeon-quest", dungeon=Hub.Config.SelectedDungeon, difficulty=Hub.Config.SelectedDifficulty})
 end
 
 Hub.Remotes = {}
 local function remoteStub(name, ...)
-    local args = { ... }
-    Hub.log("remote_stub", {
-        name = tostring(name),
-        argc = #args,
-        args = args,
-        evidence = Hub.StaticEvidence.RecoveredActionSymbols[tostring(name)] or nil,
-        fired = false,
-        reason = "live remotes disabled; exact original tuple not proven",
-    })
-    if Hub.SecurityPolicy.AllowGameRemotes then
-        error("Live remote firing is intentionally not implemented: " .. tostring(name))
-    end
+    local args = {...}
+    Hub.log("remote_stub", {name=tostring(name), argc=#args, args=args, evidence=Hub.StaticEvidence.RecoveredActionSymbols[tostring(name)] or nil, fired=false, reason="game remotes disabled; tuple not proven"})
+    if Hub.SecurityPolicy.AllowGameRemotes then error("Live remotes intentionally not implemented: " .. tostring(name)) end
 end
-
-function Hub.Remotes.vote(...) return remoteStub("vote", ...) end
-function Hub.Remotes.PlaySolo(...) return remoteStub("PlaySolo", ...) end
-function Hub.Remotes.ReturnToLobby(...) return remoteStub("ReturnToLobby", ...) end
-function Hub.Remotes.RetryVote(...) return remoteStub("RetryVote", ...) end
-function Hub.Remotes.changeStartValue(...) return remoteStub("changeStartValue", ...) end
-function Hub.Remotes.CreateParty(...) return remoteStub("CreateParty", ...) end
-function Hub.Remotes.GetPlayerParty(...) return remoteStub("GetPlayerParty", ...) end
-function Hub.Remotes.HandleJoinRequest(...) return remoteStub("HandleJoinRequest", ...) end
-function Hub.Remotes.KickMember(...) return remoteStub("KickMember", ...) end
-function Hub.Remotes.StartParty(...) return remoteStub("StartParty", ...) end
-function Hub.Remotes.JoinParty(...) return remoteStub("JoinParty", ...) end
-function Hub.Remotes.reloadInvy(...) return remoteStub("reloadInvy", ...) end
-function Hub.Remotes.sellItemEvent(...) return remoteStub("sellItemEvent", ...) end
-function Hub.Remotes.HandleEnemy(...) return remoteStub("HandleEnemy", ...) end
-function Hub.Remotes.WeaponAttack(...) return remoteStub("Weapon.Attack", ...) end
-function Hub.Remotes.spellEvent(...) return remoteStub("spellEvent", ...) end
-function Hub.Remotes.abilityEvent(...) return remoteStub("abilityEvent", ...) end
-function Hub.Remotes.localEvent(...) return remoteStub("localEvent", ...) end
+function Hub.Remotes.vote(...) return remoteStub("vote",...) end
+function Hub.Remotes.PlaySolo(...) return remoteStub("PlaySolo",...) end
+function Hub.Remotes.ReturnToLobby(...) return remoteStub("ReturnToLobby",...) end
+function Hub.Remotes.RetryVote(...) return remoteStub("RetryVote",...) end
+function Hub.Remotes.changeStartValue(...) return remoteStub("changeStartValue",...) end
+function Hub.Remotes.CreateParty(...) return remoteStub("CreateParty",...) end
+function Hub.Remotes.GetPlayerParty(...) return remoteStub("GetPlayerParty",...) end
+function Hub.Remotes.HandleJoinRequest(...) return remoteStub("HandleJoinRequest",...) end
+function Hub.Remotes.KickMember(...) return remoteStub("KickMember",...) end
+function Hub.Remotes.StartParty(...) return remoteStub("StartParty",...) end
+function Hub.Remotes.JoinParty(...) return remoteStub("JoinParty",...) end
+function Hub.Remotes.reloadInvy(...) return remoteStub("reloadInvy",...) end
+function Hub.Remotes.sellItemEvent(...) return remoteStub("sellItemEvent",...) end
+function Hub.Remotes.HandleEnemy(...) return remoteStub("HandleEnemy",...) end
+function Hub.Remotes.WeaponAttack(...) return remoteStub("Weapon.Attack",...) end
+function Hub.Remotes.spellEvent(...) return remoteStub("spellEvent",...) end
+function Hub.Remotes.abilityEvent(...) return remoteStub("abilityEvent",...) end
+function Hub.Remotes.localEvent(...) return remoteStub("localEvent",...) end
 
 Hub.Dungeon = {}
 function Hub.Dungeon.joinSelected() return Hub.Remotes.PlaySolo(Hub.Config.SelectedDungeon, Hub.Config.SelectedDifficulty) end
 function Hub.Dungeon.retry() return Hub.Remotes.RetryVote(true) end
-function Hub.Dungeon.voteBonusBoss(value) Hub.Config.AutoBonusBoss = value == true; return Hub.Remotes.vote("BonusBoss", Hub.Config.AutoBonusBoss) end
+function Hub.Dungeon.voteBonusBoss(v) Hub.Config.AutoBonusBoss = v == true; return Hub.Remotes.vote("BonusBoss",Hub.Config.AutoBonusBoss) end
 function Hub.Dungeon.returnToLobby() return Hub.Remotes.ReturnToLobby() end
 
 Hub.Party = {}
-function Hub.Party.create() return Hub.Remotes.CreateParty({ mode = "Carry", visibility = "Private", dryRun = true }) end
+function Hub.Party.create() return Hub.Remotes.CreateParty({mode="Carry", visibility="Private", dryRun=true}) end
 function Hub.Party.start() return Hub.Remotes.StartParty() end
 function Hub.Party.join(owner) return Hub.Remotes.JoinParty(owner) end
 function Hub.Party.kick(member) return Hub.Remotes.KickMember(member) end
@@ -356,28 +301,19 @@ function Hub.Party.handleJoinRequest(player, accept) return Hub.Remotes.HandleJo
 
 Hub.Inventory = {}
 function Hub.Inventory.reload() return Hub.Remotes.reloadInvy() end
-function Hub.Inventory.shouldSell(_item) return false end
+function Hub.Inventory.shouldSell(_) return false end
 function Hub.Inventory.autoSell(items)
     Hub.Inventory.reload()
-    for _, item in pairs(items or {}) do
-        if Hub.Inventory.shouldSell(item) then Hub.Remotes.sellItemEvent(item) end
-    end
+    for _, item in pairs(items or {}) do if Hub.Inventory.shouldSell(item) then Hub.Remotes.sellItemEvent(item) end end
 end
 
 Hub.Combat = {}
-function Hub.Combat.handleEnemy(enemy)
-    Hub.Remotes.HandleEnemy(enemy)
-    if Hub.Config.Killaura then Hub.Remotes.WeaponAttack(enemy) end
-end
-function Hub.Combat.castSkill(slot, target)
-    Hub.Remotes.spellEvent(slot, target)
-    Hub.Remotes.abilityEvent(slot, target)
-    Hub.Remotes.localEvent("skill", slot, target)
-end
+function Hub.Combat.handleEnemy(enemy) Hub.Remotes.HandleEnemy(enemy); if Hub.Config.Killaura then Hub.Remotes.WeaponAttack(enemy) end end
+function Hub.Combat.castSkill(slot,target) Hub.Remotes.spellEvent(slot,target); Hub.Remotes.abilityEvent(slot,target); Hub.Remotes.localEvent("skill",slot,target) end
 
 Hub.Loops = {}
 function Hub.Loops.autoFarmTick()
-    if not Hub.Config.AutoFarm then return Hub.log("loop_skip", { loop = "AutoFarm" }) end
+    if not Hub.Config.AutoFarm then return Hub.log("loop_skip", {loop="AutoFarm"}) end
     if Hub.Config.AutoJoin then Hub.Dungeon.joinSelected() end
     if Hub.Config.AutoBonusBoss then Hub.Dungeon.voteBonusBoss(true) end
     if Hub.Config.Killaura then Hub.Combat.handleEnemy("DRY_RUN_ENEMY") end
@@ -385,124 +321,60 @@ function Hub.Loops.autoFarmTick()
 end
 
 Hub.UI = {}
-
-local function makeButton(parent, y, text, callback)
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0, 210, 0, 30)
-    button.Position = UDim2.new(0, 14, 0, y)
-    button.BackgroundColor3 = Color3.fromRGB(43, 48, 64)
-    button.TextColor3 = Color3.fromRGB(240, 244, 255)
-    button.TextSize = 12
-    button.Font = Enum.Font.GothamSemibold
-    button.Text = text
-    button.Parent = parent
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = button
-    button.MouseButton1Click:Connect(function()
-        local ok, err = pcall(callback)
-        if not ok then Hub.log("button_error", { button = text, error = tostring(err) }) end
-    end)
-    return button
+local function makeButton(parent, x, y, text, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 155, 0, 28); b.Position = UDim2.new(0, x, 0, y)
+    b.BackgroundColor3 = Color3.fromRGB(43,48,64); b.TextColor3 = Color3.fromRGB(240,244,255)
+    b.TextSize = 11; b.Font = Enum.Font.GothamSemibold; b.Text = text; b.Parent = parent
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,8); c.Parent = b
+    b.MouseButton1Click:Connect(function() local ok,err=pcall(callback); if not ok then Hub.log("button_error",{button=text,error=tostring(err)}) end end)
+    return b
 end
-
 function Hub.UI.createLocal()
     local ok, err = pcall(function()
-        local players = game:GetService("Players")
-        local player = players.LocalPlayer
-        local parent = player and player:FindFirstChildOfClass("PlayerGui")
+        local p = game:GetService("Players").LocalPlayer
+        local parent = p and p:FindFirstChildOfClass("PlayerGui")
         if not parent then return end
-
-        local old = parent:FindFirstChild("DQCleanV17")
-        if old then old:Destroy() end
-
-        local gui = Instance.new("ScreenGui")
-        gui.Name = "DQCleanV17"
-        gui.ResetOnSpawn = false
-        gui.Parent = parent
-        Hub.Runtime.Gui = gui
-
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(0, 510, 0, 360)
-        frame.Position = UDim2.new(0, 20, 0, 95)
-        frame.BackgroundColor3 = Color3.fromRGB(22, 24, 32)
-        frame.BorderSizePixel = 0
-        frame.Parent = gui
-
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 12)
-        corner.Parent = frame
-
-        local title = Instance.new("TextLabel")
-        title.BackgroundTransparency = 1
-        title.Position = UDim2.new(0, 14, 0, 10)
-        title.Size = UDim2.new(1, -28, 0, 24)
-        title.Font = Enum.Font.GothamBold
-        title.TextSize = 15
-        title.TextColor3 = Color3.fromRGB(240, 244, 255)
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Text = "DQ Clean v17 - Safe Local Test"
-        title.Parent = frame
-
-        local status = Instance.new("TextLabel")
-        status.BackgroundColor3 = Color3.fromRGB(29, 32, 43)
-        status.Position = UDim2.new(0, 240, 0, 48)
-        status.Size = UDim2.new(1, -254, 1, -62)
-        status.Font = Enum.Font.Gotham
-        status.TextSize = 12
-        status.TextColor3 = Color3.fromRGB(190, 198, 220)
-        status.TextWrapped = true
-        status.TextXAlignment = Enum.TextXAlignment.Left
-        status.TextYAlignment = Enum.TextYAlignment.Top
-        status.Text = "Ready. No external HTTP. No remotes fired.\nLog: " .. LogFile
-        status.Parent = frame
-        Hub.Runtime.StatusText = status
-
-        local statusCorner = Instance.new("UICorner")
-        statusCorner.CornerRadius = UDim.new(0, 8)
-        statusCorner.Parent = status
-
-        makeButton(frame, 48, "Security Self-Test", Hub.assertSecurity)
-        makeButton(frame, 84, "Save Local Config", function() Hub.ConfigSystem.save("v17test") end)
-        makeButton(frame, 120, "Load Local Config", function() Hub.ConfigSystem.load("v17test") end)
-        makeButton(frame, 156, "Build Run Payload", function() Hub.onRunFinished({ success = true, player = "DRY_RUN", dungeon = Hub.Config.SelectedDungeon, level = 0, gold = 0, exp = 0, time = "00:00", drops = "none" }) end)
-        makeButton(frame, 192, "Build Ultimate Payload", function() Hub.onUltimateDrop({ Name = "DRY_RUN_ULTIMATE" }) end)
-        makeButton(frame, 228, "Dry-Run AutoFarm Flow", function()
-            Hub.Config.AutoFarm = true
-            Hub.Config.AutoJoin = true
-            Hub.Config.AutoBonusBoss = true
-            Hub.Config.Killaura = true
-            Hub.Config.AutoSell = true
-            Hub.Loops.autoFarmTick()
-        end)
-        makeButton(frame, 264, "Party Dry-Run", function()
-            Hub.Party.create()
-            Hub.Party.handleJoinRequest("DRY_RUN_PLAYER", true)
-            Hub.Party.kick("DRY_RUN_PLAYER")
-        end)
-        makeButton(frame, 300, "Combat Dry-Run", function()
-            Hub.Combat.handleEnemy("DRY_RUN_ENEMY")
-            Hub.Combat.castSkill("DRY_RUN_SLOT", "DRY_RUN_ENEMY")
-        end)
+        local old = parent:FindFirstChild("DQCleanV18"); if old then old:Destroy() end
+        local gui = Instance.new("ScreenGui"); gui.Name="DQCleanV18"; gui.ResetOnSpawn=false; gui.Parent=parent
+        local frame = Instance.new("Frame"); frame.Size=UDim2.new(0,560,0,390); frame.Position=UDim2.new(0,20,0,85); frame.BackgroundColor3=Color3.fromRGB(22,24,32); frame.BorderSizePixel=0; frame.Parent=gui
+        local fc=Instance.new("UICorner"); fc.CornerRadius=UDim.new(0,12); fc.Parent=frame
+        local title=Instance.new("TextLabel"); title.BackgroundTransparency=1; title.Position=UDim2.new(0,14,0,10); title.Size=UDim2.new(1,-28,0,24); title.Font=Enum.Font.GothamBold; title.TextSize=15; title.TextColor3=Color3.fromRGB(240,244,255); title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="DQ Clean v18 - Safe Local Test"; title.Parent=frame
+        local status=Instance.new("TextLabel"); status.BackgroundColor3=Color3.fromRGB(29,32,43); status.Position=UDim2.new(0,340,0,48); status.Size=UDim2.new(1,-354,1,-62); status.Font=Enum.Font.Gotham; status.TextSize=12; status.TextColor3=Color3.fromRGB(190,198,220); status.TextWrapped=true; status.TextXAlignment=Enum.TextXAlignment.Left; status.TextYAlignment=Enum.TextYAlignment.Top; status.Text="Ready. Log: "..LogFile; status.Parent=frame
+        local sc=Instance.new("UICorner"); sc.CornerRadius=UDim.new(0,8); sc.Parent=status
+        Hub.Runtime.StatusText=status
+        local leftX, rightX = 14, 178
+        makeButton(frame,leftX,48,"Security Test",Hub.assertSecurity)
+        makeButton(frame,rightX,48,"Export Summary",Hub.exportSummary)
+        makeButton(frame,leftX,84,"Save Config",function() Hub.ConfigSystem.save("v18test") end)
+        makeButton(frame,rightX,84,"Load Config",function() Hub.ConfigSystem.load("v18test") end)
+        makeButton(frame,leftX,120,"Run Payload",function() Hub.onRunFinished({success=true,player="DRY_RUN",dungeon=Hub.Config.SelectedDungeon,level=0,gold=0,exp=0,time="00:00",drops="none"}) end)
+        makeButton(frame,rightX,120,"Ultimate Payload",function() Hub.onUltimateDrop({Name="DRY_RUN_ULTIMATE"}) end)
+        makeButton(frame,leftX,156,"AutoFarm Dry",function() Hub.Config.AutoFarm=true; Hub.Config.AutoJoin=true; Hub.Config.AutoBonusBoss=true; Hub.Config.Killaura=true; Hub.Config.AutoSell=true; Hub.Loops.autoFarmTick() end)
+        makeButton(frame,rightX,156,"Dungeon Retry Dry",function() Hub.Dungeon.retry(); Hub.Dungeon.returnToLobby() end)
+        makeButton(frame,leftX,192,"Party Dry",function() Hub.Party.create(); Hub.Party.handleJoinRequest("DRY_RUN_PLAYER",true); Hub.Party.kick("DRY_RUN_PLAYER"); Hub.Party.start() end)
+        makeButton(frame,rightX,192,"Combat Dry",function() Hub.Combat.handleEnemy("DRY_RUN_ENEMY"); Hub.Combat.castSkill("DRY_RUN_SLOT","DRY_RUN_ENEMY") end)
+        makeButton(frame,leftX,228,"Inventory Dry",function() Hub.Inventory.autoSell({{Name="DRY_RUN_ITEM"}}) end)
+        makeButton(frame,rightX,228,"Blocked Net Dry",function() Hub.Network.httpGet("external"); Hub.Network.request({Url="blocked"}); Hub.Network.queueOnTeleport("blocked") end)
     end)
-    if ok then return Hub.log("local_ui_created", { ui = "DQCleanV17" }) end
-    return Hub.log("local_ui_failed", { error = tostring(err) })
+    if ok then return Hub.log("local_ui_created", {ui="DQCleanV18"}) end
+    return Hub.log("local_ui_failed", {error=tostring(err)})
 end
 
 function Hub.selfTest()
     Hub.resetLog()
     Hub.assertSecurity()
     Hub.Network.httpGet("external-ui-removed")
-    Hub.Network.request({ label = "external-http-removed" })
+    Hub.Network.request({label="external-http-removed"})
     Hub.Network.queueOnTeleport("removed")
     Hub.updateDashboardStats()
     Hub.ConfigSystem.save("startup")
     Hub.ConfigSystem.load("startup")
     Hub.UI.createLocal()
-    Hub.log("self_test_complete", { outputFile = LogFile })
-    print("[DQ Clean v17] Done. Use UI buttons, then upload " .. LogFile)
+    Hub.exportSummary()
+    Hub.log("self_test_complete", {outputFile=LogFile, summaryFile=SummaryFile})
+    print("[DQ Clean v18] Ready. Click UI buttons, then upload " .. LogFile .. " and " .. SummaryFile)
 end
 
 Hub.selfTest()
-
 return Hub
