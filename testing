@@ -1,683 +1,1378 @@
 --[[
-MiniRayfield Local Shim
+Type Or Die Helper - Full Updated File
+Version: 2026-05-16
 
-Goal:
-- Replace the external Rayfield loadstring dependency.
-- Keep the same basic Rayfield-style API used by the reconstructed Type Or Die script.
-- Preserve a similar dark, rounded, tabbed look and notification feel.
+What this file does:
+- Creates a local Rayfield-style UI.
+- Detects the visible Type Or Die question from on-screen TextLabels.
+- Lets you manually search a question.
+- Shows answer suggestions from a local answer database.
+- Lets you copy an answer if your executor supports setclipboard.
 
-How to use in your script:
-1. Paste this whole file above your rebuilt Type Or Die logic.
-2. Replace this old line:
-
-   local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-
-   with this:
-
-   local Rayfield = CreateLocalRayfield()
-
-Supported API used by the rebuild:
-- Rayfield:CreateWindow({...})
-- Window:CreateTab(Name, Icon)
-- Tab:CreateParagraph({Title = "...", Content = "..."})
-- Tab:CreateInput({Name = "...", PlaceholderText = "...", RemoveTextAfterFocusLost = true, Callback = function(Text) end})
-- Tab:CreateToggle({Name = "...", CurrentValue = false, Callback = function(Value) end})
-- Rayfield:Notify({Title = "...", Content = "...", Duration = 5})
+What this file does NOT do:
+- Does not fire Roblox remotes.
+- Does not auto-submit answers.
+- Does not use external Rayfield / external UI loaders.
+- Does not require game:HttpGet after this file is already loaded.
 ]]
 
-local function CreateLocalRayfield()
-    local Players = game:GetService("Players")
-    local TweenService = game:GetService("TweenService")
-    local UserInputService = game:GetService("UserInputService")
+--// Services
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
-    local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
 
-    local Colors = {
-        Background = Color3.fromRGB(21, 23, 31),
-        Panel = Color3.fromRGB(29, 32, 43),
-        Panel2 = Color3.fromRGB(35, 39, 52),
-        Panel3 = Color3.fromRGB(43, 48, 64),
-        Stroke = Color3.fromRGB(70, 78, 104),
-        Accent = Color3.fromRGB(116, 128, 255),
-        Accent2 = Color3.fromRGB(92, 199, 255),
-        Text = Color3.fromRGB(238, 242, 255),
-        Muted = Color3.fromRGB(170, 178, 204),
-        DarkText = Color3.fromRGB(90, 96, 120),
-        Success = Color3.fromRGB(75, 220, 140),
-        Warning = Color3.fromRGB(255, 205, 100),
+--// Settings
+local GuiName = "TypeOrDieHelper_LocalFull"
+local AutoDetect = true
+local LastDetectedQuestion = ""
+local LastBestAnswer = ""
+
+--// Answer database
+local RawQuestions = {}
+
+local function AddQuestion(Keys, Answers)
+    for _, Key in ipairs(Keys) do
+        table.insert(RawQuestions, {
+            Key = Key,
+            Answers = Answers,
+        })
+    end
+end
+
+AddQuestion({"name a popular dessert", "popular dessert", "dessert food", "name a popular dessert food"}, {
+    "cheesecake",
+    "tiramisu",
+    "brownies",
+    "icecream",
+    "baklava",
+    "pudding",
+    "cupcake",
+})
+
+AddQuestion({"type of tree", "tree"}, {
+    "eucalyptus",
+    "sequoia",
+    "sycamore",
+    "mangrove",
+    "redwood",
+    "maple",
+    "willow",
+})
+
+AddQuestion({"human organ", "organ in human body", "body organ"}, {
+    "smallintestine",
+    "gallbladder",
+    "pancreas",
+    "esophagus",
+    "stomach",
+    "kidney",
+    "heart",
+})
+
+AddQuestion({"name one of the four seasons", "four seasons", "season"}, {
+    "summer",
+    "winter",
+    "spring",
+    "autumn",
+})
+
+AddQuestion({"character from finding nemo", "finding nemo character", "char from finding nemo"}, {
+    "squirt",
+    "bruce",
+    "crush",
+    "marlin",
+    "dory",
+    "nemo",
+})
+
+AddQuestion({"find in a kitchen", "something found in kitchen", "kitchen item", "something in kitchen"}, {
+    "refrigerator",
+    "dishwasher",
+    "microwave",
+    "saucepan",
+    "toaster",
+    "spatula",
+})
+
+AddQuestion({"programming language", "coding language"}, {
+    "javascript",
+    "typescript",
+    "python",
+    "assembly",
+    "kotlin",
+    "swift",
+})
+
+AddQuestion({"object you fill with air", "thing you fill with air", "fill with air"}, {
+    "basketball",
+    "football",
+    "balloon",
+    "tire",
+})
+
+AddQuestion({"music genre", "genre of music"}, {
+    "psychedelicrock",
+    "electronic",
+    "classical",
+    "reggae",
+    "country",
+    "hiphop",
+})
+
+AddQuestion({"that has roots", "thing that has roots", "has roots"}, {
+    "mangrove",
+    "carrot",
+    "plant",
+    "tree",
+})
+
+AddQuestion({"something in bathroom", "bathroom item", "find in bathroom"}, {
+    "toothbrush",
+    "bathtub",
+    "toilet",
+    "shampoo",
+    "mirror",
+})
+
+AddQuestion({"type of cheese", "cheese"}, {
+    "gorgonzola",
+    "mozzarella",
+    "parmesan",
+    "cheddar",
+    "provolone",
+})
+
+AddQuestion({"word that rhymes with horse", "rhymes with horse", "word that rhtmes with horse"}, {
+    "reinforce",
+    "resource",
+    "course",
+    "source",
+    "force",
+})
+
+AddQuestion({"minecraft monster", "hostile minecraft mob", "monster in minecraft"}, {
+    "enderman",
+    "skeleton",
+    "creeper",
+    "zombie",
+    "guardian",
+})
+
+AddQuestion({"american emergency service", "emergency service", "us emergency service"}, {
+    "firefighter",
+    "ambulance",
+    "police",
+})
+
+AddQuestion({"something in taco", "taco topping", "taco ingredient"}, {
+    "guacamole",
+    "cilantro",
+    "lettuce",
+    "cheese",
+    "tomato",
+})
+
+AddQuestion({"position in soccer", "soccer position", "position in socker"}, {
+    "goalkeeper",
+    "midfielder",
+    "defender",
+    "striker",
+    "forward",
+})
+
+AddQuestion({"type of snake", "snake"}, {
+    "rattlesnake",
+    "anaconda",
+    "python",
+    "cobra",
+    "viper",
+})
+
+AddQuestion({"popular breakfast cereal", "breakfast cereal", "cereal"}, {
+    "cornflakes",
+    "cheerios",
+    "frostedflakes",
+    "fruitloops",
+})
+
+AddQuestion({"edible meat", "meat"}, {
+    "tenderloin",
+    "hamburger",
+    "chicken",
+    "sausage",
+    "turkey",
+})
+
+AddQuestion({"superhero"}, {
+    "spiderman",
+    "superman",
+    "batman",
+    "wolverine",
+    "deadpool",
+})
+
+AddQuestion({"char from spongebob", "spongebob character", "character from spongebob"}, {
+    "squidward",
+    "spongebob",
+    "patrick",
+    "plankton",
+    "sandy",
+})
+
+AddQuestion({"religion"}, {
+    "christianity",
+    "buddhism",
+    "hinduism",
+    "islam",
+    "judaism",
+})
+
+AddQuestion({"animal that has a horn", "animal that has a horm", "animal with horn"}, {
+    "rhinoceros",
+    "narwhal",
+    "unicorn",
+    "antelope",
+    "goat",
+})
+
+AddQuestion({"popular swimming stroke", "swimming stroke"}, {
+    "breaststroke",
+    "butterfly",
+    "backstroke",
+    "freestyle",
+})
+
+AddQuestion({"type of currency", "currency"}, {
+    "cryptocurrency",
+    "euro",
+    "dollar",
+    "peso",
+    "yen",
+})
+
+AddQuestion({"search engine"}, {
+    "duckduckgo",
+    "google",
+    "bing",
+    "yahoo",
+})
+
+AddQuestion({"overwatch char", "overwatch character"}, {
+    "wreckingball",
+    "reinhardt",
+    "soldier76",
+    "tracer",
+    "genji",
+})
+
+AddQuestion({"char from shrek", "shrek character", "character from shrek"}, {
+    "pussinboots",
+    "gingerbreadman",
+    "pinocchio",
+    "donkey",
+    "shrek",
+})
+
+AddQuestion({"house in hogwarts", "hogwarts house"}, {
+    "hufflepuff",
+    "gryffindor",
+    "ravenclaw",
+    "slytherin",
+})
+
+AddQuestion({"popular video game", "video game"}, {
+    "minecraft",
+    "fortnite",
+    "roblox",
+    "overwatch",
+    "terraria",
+})
+
+AddQuestion({"country involved in wwi", "wwi country", "world war one country"}, {
+    "austriahungary",
+    "unitedkingdom",
+    "germany",
+    "france",
+    "serbia",
+})
+
+AddQuestion({"name teenage mutant ninja turtle", "teenage mutant ninja turtle", "tmnt turtle"}, {
+    "michelangelo",
+    "donatello",
+    "leonardo",
+    "raphael",
+})
+
+AddQuestion({"breed of dog", "dog breed"}, {
+    "goldenretriever",
+    "germanshepherd",
+    "labrador",
+    "chihuahua",
+    "rottweiler",
+})
+
+AddQuestion({"state of matter", "matter state"}, {
+    "plasma",
+    "liquid",
+    "solid",
+    "gas",
+})
+
+AddQuestion({"us state", "united states state"}, {
+    "massachusetts",
+    "northcarolina",
+    "southcarolina",
+    "pennsylvania",
+    "california",
+    "kentucky",
+})
+
+AddQuestion({"friendly minecraft mob", "minecraft friendly mob"}, {
+    "villager",
+    "axolotl",
+    "allay",
+    "cow",
+    "sheep",
+})
+
+AddQuestion({"topping that is usually in a hamburger", "hamburger topping", "burger topping"}, {
+    "lettuce",
+    "tomato",
+    "pickle",
+    "onion",
+    "cheese",
+})
+
+AddQuestion({"flightless bird"}, {
+    "ostrich",
+    "penguin",
+    "emu",
+    "kiwi",
+})
+
+AddQuestion({"phobia"}, {
+    "arachnophobia",
+    "claustrophobia",
+    "agoraphobia",
+    "acrophobia",
+})
+
+AddQuestion({"type of currency"}, {
+    "cryptocurrency",
+    "euro",
+    "dollar",
+    "peso",
+    "yen",
+})
+
+AddQuestion({"popular dessert food"}, {
+    "cheesecake",
+    "tiramisu",
+    "brownies",
+    "icecream",
+    "baklava",
+})
+
+--// Utility
+local function Normalize(Text)
+    Text = tostring(Text or ""):lower()
+    Text = Text:gsub("&", " and ")
+    Text = Text:gsub("[%p%c]", " ")
+    Text = Text:gsub("%s+", " ")
+    Text = Text:gsub("^%s+", "")
+    Text = Text:gsub("%s+$", "")
+    return Text
+end
+
+local function Compact(Text)
+    return (Normalize(Text):gsub("%s+", ""))
+end
+
+local function ScoreQuestion(Query, Key)
+    local Q = Normalize(Query)
+    local K = Normalize(Key)
+
+    if Q == "" or K == "" then
+        return 0
+    end
+
+    if Q == K then
+        return 1000
+    end
+
+    if Q:find(K, 1, true) then
+        return 800 + #K
+    end
+
+    if K:find(Q, 1, true) then
+        return 700 + #Q
+    end
+
+    local CQ = Compact(Q)
+    local CK = Compact(K)
+
+    if CQ == CK then
+        return 950
+    end
+
+    if CQ:find(CK, 1, true) then
+        return 750 + #CK
+    end
+
+    if CK:find(CQ, 1, true) then
+        return 650 + #CQ
+    end
+
+    local Score = 0
+    for Word in Q:gmatch("%S+") do
+        if #Word >= 3 and K:find(Word, 1, true) then
+            Score = Score + #Word
+        end
+    end
+
+    return Score
+end
+
+local function FindAnswers(Query)
+    local Ranked = {}
+
+    for _, Entry in ipairs(RawQuestions) do
+        local Score = ScoreQuestion(Query, Entry.Key)
+        if Score > 0 then
+            table.insert(Ranked, {
+                Score = Score,
+                Key = Entry.Key,
+                Answers = Entry.Answers,
+            })
+        end
+    end
+
+    table.sort(Ranked, function(A, B)
+        if A.Score == B.Score then
+            return #A.Key > #B.Key
+        end
+        return A.Score > B.Score
+    end)
+
+    local Results = {}
+    local Seen = {}
+
+    for _, Match in ipairs(Ranked) do
+        for _, Answer in ipairs(Match.Answers) do
+            local Id = Compact(Answer)
+            if not Seen[Id] then
+                Seen[Id] = true
+                table.insert(Results, {
+                    Answer = Answer,
+                    Source = Match.Key,
+                    Score = Match.Score,
+                    Length = #Compact(Answer),
+                })
+            end
+        end
+    end
+
+    table.sort(Results, function(A, B)
+        if A.Score == B.Score then
+            return A.Length > B.Length
+        end
+        return A.Score > B.Score
+    end)
+
+    return Results
+end
+
+local function SafeCopy(Text)
+    Text = tostring(Text or "")
+
+    if setclipboard then
+        local Ok = pcall(function()
+            setclipboard(Text)
+        end)
+
+        if Ok then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function GetGuiParent()
+    if type(gethui) == "function" then
+        local Ok, Result = pcall(gethui)
+        if Ok and Result then
+            return Result
+        end
+    end
+
+    local OkCoreGui, Result = pcall(function()
+        return CoreGui
+    end)
+
+    if OkCoreGui and Result then
+        return Result
+    end
+
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local function IsObjVisible(Obj)
+    local Current = Obj
+
+    while Current and Current ~= game do
+        if Current:IsA("GuiObject") and Current.Visible == false then
+            return false
+        end
+
+        Current = Current.Parent
+    end
+
+    return true
+end
+
+local function LooksLikeQuestion(Text)
+    Text = tostring(Text or "")
+    local Clean = Normalize(Text)
+
+    if #Clean < 4 or #Clean > 90 then
+        return false
+    end
+
+    local Bad = {
+        "search",
+        "debug",
+        "httpget",
+        "runtime",
+        "compile",
+        "source length",
+        "type or die helper",
+        "answer suggestions",
+        "copied",
+        "no answer",
+        "local ui",
     }
 
-    local Font = Enum.Font.Gotham
-    local BoldFont = Enum.Font.GothamBold
-    local SemiboldFont = Enum.Font.GothamSemibold
+    for _, Word in ipairs(Bad) do
+        if Clean:find(Word, 1, true) then
+            return false
+        end
+    end
 
-    local Rayfield = {}
-    Rayfield.Flags = {}
+    local GoodWords = {
+        "name",
+        "type",
+        "popular",
+        "something",
+        "character",
+        "find",
+        "object",
+        "music",
+        "word",
+        "minecraft",
+        "american",
+        "position",
+        "currency",
+        "search engine",
+        "house",
+        "country",
+        "breed",
+        "state",
+        "friendly",
+        "topping",
+        "flightless",
+        "phobia",
+        "dessert",
+    }
 
-    local function GetGuiParent()
-        if type(gethui) == "function" then
-            local Ok, Result = pcall(gethui)
-            if Ok and Result then
-                return Result
+    for _, Word in ipairs(GoodWords) do
+        if Clean:find(Word, 1, true) then
+            return true
+        end
+    end
+
+    -- Most Type Or Die questions are shown in uppercase.
+    local Letters = 0
+    local Upper = 0
+
+    for Char in Text:gmatch(".") do
+        if Char:match("%a") then
+            Letters = Letters + 1
+            if Char:match("%u") then
+                Upper = Upper + 1
             end
         end
-
-        local OkCoreGui, CoreGui = pcall(function()
-            return game:GetService("CoreGui")
-        end)
-
-        if OkCoreGui and CoreGui then
-            return CoreGui
-        end
-
-        return LocalPlayer:WaitForChild("PlayerGui")
     end
 
-    local function Create(ClassName, Properties, Children)
-        local Object = Instance.new(ClassName)
+    return Letters >= 5 and Upper / math.max(Letters, 1) > 0.65
+end
 
-        for Key, Value in pairs(Properties or {}) do
-            Object[Key] = Value
-        end
+local function DetectQuestionFromScreen()
+    local BestText = ""
+    local BestScore = 0
 
-        for _, Child in ipairs(Children or {}) do
-            Child.Parent = Object
-        end
+    local Roots = {}
 
-        return Object
+    local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if PlayerGui then
+        table.insert(Roots, PlayerGui)
     end
 
-    local function Corner(Radius)
-        return Create("UICorner", {
-            CornerRadius = UDim.new(0, Radius or 10),
-        })
+    local OkCore, Core = pcall(function()
+        return CoreGui
+    end)
+
+    if OkCore and Core then
+        table.insert(Roots, Core)
     end
 
-    local function Stroke(Color, Thickness, Transparency)
-        return Create("UIStroke", {
-            Color = Color or Colors.Stroke,
-            Thickness = Thickness or 1,
-            Transparency = Transparency or 0.25,
-        })
-    end
+    for _, Root in ipairs(Roots) do
+        for _, Obj in ipairs(Root:GetDescendants()) do
+            if Obj:IsA("TextLabel") or Obj:IsA("TextButton") then
+                if Obj:IsDescendantOf(script) then
+                    continue
+                end
 
-    local function Padding(Left, Top, Right, Bottom)
-        return Create("UIPadding", {
-            PaddingLeft = UDim.new(0, Left or 0),
-            PaddingTop = UDim.new(0, Top or 0),
-            PaddingRight = UDim.new(0, Right or 0),
-            PaddingBottom = UDim.new(0, Bottom or 0),
-        })
-    end
+                if Obj:FindFirstAncestor(GuiName) then
+                    continue
+                end
 
-    local function ListLayout(PaddingPixels)
-        return Create("UIListLayout", {
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, PaddingPixels or 8),
-        })
-    end
+                if IsObjVisible(Obj) then
+                    local Text = tostring(Obj.Text or "")
+                    if LooksLikeQuestion(Text) then
+                        local Clean = Normalize(Text)
+                        local Score = #Clean
 
-    local function Tween(Object, Time, Properties)
-        local Info = TweenInfo.new(Time or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-        local Anim = TweenService:Create(Object, Info, Properties)
-        Anim:Play()
-        return Anim
-    end
+                        if Text == Text:upper() then
+                            Score = Score + 30
+                        end
 
-    local function MakeDraggable(Handle, Target)
-        local Dragging = false
-        local DragStart = nil
-        local StartPosition = nil
+                        if Obj.AbsolutePosition.Y < 250 then
+                            Score = Score + 20
+                        end
 
-        Handle.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                Dragging = true
-                DragStart = Input.Position
-                StartPosition = Target.Position
-
-                Input.Changed:Connect(function()
-                    if Input.UserInputState == Enum.UserInputState.End then
-                        Dragging = false
+                        if Score > BestScore then
+                            BestScore = Score
+                            BestText = Text
+                        end
                     end
-                end)
+                end
             end
-        end)
-
-        UserInputService.InputChanged:Connect(function(Input)
-            if not Dragging then
-                return
-            end
-
-            if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then
-                return
-            end
-
-            local Delta = Input.Position - DragStart
-            Target.Position = UDim2.new(
-                StartPosition.X.Scale,
-                StartPosition.X.Offset + Delta.X,
-                StartPosition.Y.Scale,
-                StartPosition.Y.Offset + Delta.Y
-            )
-        end)
+        end
     end
 
-    local ScreenGui = Create("ScreenGui", {
-        Name = "MiniRayfieldLocal",
-        IgnoreGuiInset = true,
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        Parent = GetGuiParent(),
+    return BestText
+end
+
+--// UI helpers
+local Colors = {
+    Background = Color3.fromRGB(17, 19, 27),
+    Panel = Color3.fromRGB(25, 28, 39),
+    Panel2 = Color3.fromRGB(33, 37, 52),
+    Panel3 = Color3.fromRGB(44, 50, 70),
+    Stroke = Color3.fromRGB(68, 78, 108),
+    Accent = Color3.fromRGB(115, 128, 255),
+    Accent2 = Color3.fromRGB(85, 210, 255),
+    Text = Color3.fromRGB(240, 244, 255),
+    Muted = Color3.fromRGB(170, 178, 205),
+    Good = Color3.fromRGB(85, 220, 145),
+    Bad = Color3.fromRGB(255, 120, 120),
+}
+
+local Font = Enum.Font.Gotham
+local BoldFont = Enum.Font.GothamBold
+local SemiboldFont = Enum.Font.GothamSemibold
+
+local function Create(ClassName, Props, Children)
+    local Obj = Instance.new(ClassName)
+
+    for Key, Value in pairs(Props or {}) do
+        Obj[Key] = Value
+    end
+
+    for _, Child in ipairs(Children or {}) do
+        Child.Parent = Obj
+    end
+
+    return Obj
+end
+
+local function Corner(Radius)
+    return Create("UICorner", {
+        CornerRadius = UDim.new(0, Radius or 10),
+    })
+end
+
+local function Stroke(Color, Thickness, Transparency)
+    return Create("UIStroke", {
+        Color = Color or Colors.Stroke,
+        Thickness = Thickness or 1,
+        Transparency = Transparency or 0.25,
+    })
+end
+
+local function Padding(Left, Top, Right, Bottom)
+    return Create("UIPadding", {
+        PaddingLeft = UDim.new(0, Left or 0),
+        PaddingTop = UDim.new(0, Top or 0),
+        PaddingRight = UDim.new(0, Right or 0),
+        PaddingBottom = UDim.new(0, Bottom or 0),
+    })
+end
+
+local function List(PaddingPixels)
+    return Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, PaddingPixels or 8),
+    })
+end
+
+local function Tween(Obj, Time, Props)
+    local Info = TweenInfo.new(Time or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local Anim = TweenService:Create(Obj, Info, Props)
+    Anim:Play()
+    return Anim
+end
+
+local GuiParent = GetGuiParent()
+local OldGui = GuiParent:FindFirstChild(GuiName)
+if OldGui then
+    OldGui:Destroy()
+end
+
+local ScreenGui = Create("ScreenGui", {
+    Name = GuiName,
+    IgnoreGuiInset = true,
+    ResetOnSpawn = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    Parent = GuiParent,
+})
+
+local Main = Create("Frame", {
+    Name = "Window",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    Size = UDim2.new(0, 760, 0, 500),
+    BackgroundColor3 = Colors.Background,
+    ClipsDescendants = true,
+    Parent = ScreenGui,
+}, {
+    Corner(16),
+    Stroke(Colors.Stroke, 1, 0.08),
+})
+
+local Topbar = Create("Frame", {
+    Name = "Topbar",
+    Size = UDim2.new(1, 0, 0, 58),
+    BackgroundColor3 = Colors.Panel,
+    BorderSizePixel = 0,
+    Parent = Main,
+})
+
+Create("TextLabel", {
+    Name = "Title",
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 18, 0, 8),
+    Size = UDim2.new(1, -112, 0, 24),
+    Font = BoldFont,
+    Text = "Type Or Die Helper",
+    TextColor3 = Colors.Text,
+    TextSize = 15,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+    Parent = Topbar,
+})
+
+Create("TextLabel", {
+    Name = "Subtitle",
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 18, 0, 31),
+    Size = UDim2.new(1, -112, 0, 18),
+    Font = Font,
+    Text = "Local UI • no external Rayfield • no remotes",
+    TextColor3 = Colors.Muted,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+    Parent = Topbar,
+})
+
+local MinimizeButton = Create("TextButton", {
+    Name = "Minimize",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -54, 0, 14),
+    Size = UDim2.new(0, 30, 0, 30),
+    AutoButtonColor = false,
+    BackgroundColor3 = Colors.Panel2,
+    Font = BoldFont,
+    Text = "–",
+    TextColor3 = Colors.Text,
+    TextSize = 18,
+    Parent = Topbar,
+}, {
+    Corner(8),
+    Stroke(Colors.Stroke, 1, 0.35),
+})
+
+local CloseButton = Create("TextButton", {
+    Name = "Close",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -18, 0, 14),
+    Size = UDim2.new(0, 30, 0, 30),
+    AutoButtonColor = false,
+    BackgroundColor3 = Colors.Panel2,
+    Font = BoldFont,
+    Text = "×",
+    TextColor3 = Colors.Text,
+    TextSize = 18,
+    Parent = Topbar,
+}, {
+    Corner(8),
+    Stroke(Colors.Stroke, 1, 0.35),
+})
+
+local Sidebar = Create("Frame", {
+    Name = "Sidebar",
+    Position = UDim2.new(0, 0, 0, 58),
+    Size = UDim2.new(0, 190, 1, -58),
+    BackgroundColor3 = Colors.Panel,
+    BorderSizePixel = 0,
+    Parent = Main,
+}, {
+    Padding(12, 12, 12, 12),
+    List(8),
+})
+
+local Content = Create("Frame", {
+    Name = "Content",
+    Position = UDim2.new(0, 190, 0, 58),
+    Size = UDim2.new(1, -190, 1, -58),
+    BackgroundColor3 = Colors.Background,
+    BorderSizePixel = 0,
+    Parent = Main,
+}, {
+    Padding(14, 14, 14, 14),
+})
+
+--// Draggable topbar
+do
+    local Dragging = false
+    local DragStart = nil
+    local StartPosition = nil
+
+    Topbar.InputBegan:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+            Dragging = true
+            DragStart = Input.Position
+            StartPosition = Main.Position
+
+            Input.Changed:Connect(function()
+                if Input.UserInputState == Enum.UserInputState.End then
+                    Dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(Input)
+        if not Dragging then
+            return
+        end
+
+        if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then
+            return
+        end
+
+        local Delta = Input.Position - DragStart
+
+        Main.Position = UDim2.new(
+            StartPosition.X.Scale,
+            StartPosition.X.Offset + Delta.X,
+            StartPosition.Y.Scale,
+            StartPosition.Y.Offset + Delta.Y
+        )
+    end)
+end
+
+local IsMinimized = false
+
+MinimizeButton.MouseButton1Click:Connect(function()
+    IsMinimized = not IsMinimized
+    Sidebar.Visible = not IsMinimized
+    Content.Visible = not IsMinimized
+
+    Tween(Main, 0.2, {
+        Size = IsMinimized and UDim2.new(0, 760, 0, 58) or UDim2.new(0, 760, 0, 500),
     })
 
-    local Existing = ScreenGui.Parent:FindFirstChild("MiniRayfieldLocal")
-    if Existing and Existing ~= ScreenGui then
-        Existing:Destroy()
-    end
+    MinimizeButton.Text = IsMinimized and "+" or "–"
+end)
 
-    local NotificationHolder = Create("Frame", {
-        Name = "Notifications",
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -18, 0, 18),
-        Size = UDim2.new(0, 360, 1, -36),
-        BackgroundTransparency = 1,
-        Parent = ScreenGui,
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+local function MakeTab(Name)
+    local Button = Create("TextButton", {
+        Name = Name .. "Button",
+        Size = UDim2.new(1, 0, 0, 38),
+        AutoButtonColor = false,
+        BackgroundColor3 = Colors.Panel2,
+        Font = SemiboldFont,
+        Text = Name,
+        TextColor3 = Colors.Muted,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Sidebar,
     }, {
-        ListLayout(10),
+        Corner(10),
+        Stroke(Colors.Stroke, 1, 0.55),
+        Padding(12, 0, 12, 0),
     })
 
-    NotificationHolder.UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-    NotificationHolder.UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+    local Page = Create("ScrollingFrame", {
+        Name = Name,
+        Size = UDim2.new(1, 0, 1, 0),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = Colors.Accent,
+        Visible = false,
+        Parent = Content,
+    }, {
+        Padding(2, 2, 8, 12),
+        List(10),
+    })
 
-    function Rayfield:Notify(Config)
-        Config = Config or {}
+    return Button, Page
+end
 
-        local Duration = tonumber(Config.Duration) or 5
-        local Title = tostring(Config.Title or "Notification")
-        local Content = tostring(Config.Content or "")
+local MainButton, MainPage = MakeTab("Main")
+local HelpButton, HelpPage = MakeTab("Help")
+local AllPages = {
+    {Button = MainButton, Page = MainPage},
+    {Button = HelpButton, Page = HelpPage},
+}
 
-        local Card = Create("Frame", {
-            Name = "Notification",
-            Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = Colors.Panel,
-            BackgroundTransparency = 0.03,
-            ClipsDescendants = true,
-            Parent = NotificationHolder,
-        }, {
-            Corner(13),
-            Stroke(Colors.Stroke, 1, 0.1),
-            Padding(14, 12, 14, 12),
+local function SelectPage(TargetPage)
+    for _, Item in ipairs(AllPages) do
+        Item.Page.Visible = false
+        Tween(Item.Button, 0.12, {
+            BackgroundColor3 = Colors.Panel2,
+            TextColor3 = Colors.Muted,
         })
+    end
 
-        local Bar = Create("Frame", {
-            Name = "AccentBar",
-            Position = UDim2.new(0, 0, 0, 0),
-            Size = UDim2.new(0, 4, 1, 0),
-            BackgroundColor3 = Colors.Accent,
-            BorderSizePixel = 0,
-            Parent = Card,
-        }, {
-            Corner(13),
+    TargetPage.Page.Visible = true
+
+    Tween(TargetPage.Button, 0.12, {
+        BackgroundColor3 = Colors.Accent,
+        TextColor3 = Colors.Text,
+    })
+end
+
+MainButton.MouseButton1Click:Connect(function()
+    SelectPage(AllPages[1])
+end)
+
+HelpButton.MouseButton1Click:Connect(function()
+    SelectPage(AllPages[2])
+end)
+
+local function Card(Parent, Height)
+    return Create("Frame", {
+        Size = UDim2.new(1, 0, 0, Height or 70),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundColor3 = Colors.Panel,
+        Parent = Parent,
+    }, {
+        Corner(12),
+        Stroke(Colors.Stroke, 1, 0.42),
+        Padding(14, 12, 14, 12),
+    })
+end
+
+local StatusLabel = nil
+local QuestionBox = nil
+local ResultsHolder = nil
+local AutoToggleButton = nil
+
+local function SetStatus(Text, Good)
+    if StatusLabel then
+        StatusLabel.Text = tostring(Text)
+        StatusLabel.TextColor3 = Good and Colors.Good or Colors.Muted
+    end
+    print("[TypeOrDieHelper]", Text)
+end
+
+local function ClearResults()
+    if not ResultsHolder then
+        return
+    end
+
+    for _, Child in ipairs(ResultsHolder:GetChildren()) do
+        if not Child:IsA("UIListLayout") and not Child:IsA("UIPadding") then
+            Child:Destroy()
+        end
+    end
+end
+
+local function AddAnswerButton(Index, Result)
+    local Answer = Result.Answer
+    local Source = Result.Source
+    local Length = Result.Length
+
+    local Button = Create("TextButton", {
+        Name = "Answer_" .. tostring(Index),
+        Size = UDim2.new(1, 0, 0, 44),
+        AutoButtonColor = false,
+        BackgroundColor3 = Colors.Panel2,
+        Font = SemiboldFont,
+        Text = string.format("%02d. %s  (%d)", Index, Answer, Length),
+        TextColor3 = Colors.Text,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = ResultsHolder,
+    }, {
+        Corner(10),
+        Stroke(Colors.Stroke, 1, 0.45),
+        Padding(12, 0, 12, 0),
+    })
+
+    Button.MouseEnter:Connect(function()
+        Tween(Button, 0.1, {
+            BackgroundColor3 = Colors.Panel3,
         })
+    end)
 
-        local Body = Create("Frame", {
-            Name = "Body",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, -8, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
-            Position = UDim2.new(0, 8, 0, 0),
-            Parent = Card,
-        }, {
-            ListLayout(4),
+    Button.MouseLeave:Connect(function()
+        Tween(Button, 0.1, {
+            BackgroundColor3 = Colors.Panel2,
         })
+    end)
 
-        Create("TextLabel", {
-            Name = "Title",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 20),
-            Font = SemiboldFont,
-            Text = Title,
-            TextColor3 = Colors.Text,
-            TextSize = 15,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Center,
-            TextWrapped = true,
-            Parent = Body,
-        })
+    Button.MouseButton1Click:Connect(function()
+        LastBestAnswer = Answer
+        local Copied = SafeCopy(Answer)
 
-        Create("TextLabel", {
-            Name = "Content",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
+        if Copied then
+            SetStatus("Copied: " .. Answer, true)
+        else
+            SetStatus("Selected: " .. Answer .. " | Clipboard unsupported, copy manually.", false)
+        end
+    end)
+
+    local Sub = Create("TextLabel", {
+        Name = "Source",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 25),
+        Size = UDim2.new(1, -24, 0, 16),
+        Font = Font,
+        Text = "matched: " .. tostring(Source),
+        TextColor3 = Colors.Muted,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Button,
+    })
+
+    return Button
+end
+
+local function RenderAnswers(Query)
+    Query = tostring(Query or "")
+    LastDetectedQuestion = Query
+
+    ClearResults()
+
+    if QuestionBox and QuestionBox.Text ~= Query then
+        QuestionBox.Text = Query
+    end
+
+    if Normalize(Query) == "" then
+        LastBestAnswer = ""
+        SetStatus("Enter or detect a question.", false)
+        return
+    end
+
+    local Answers = FindAnswers(Query)
+
+    if #Answers == 0 then
+        LastBestAnswer = ""
+        SetStatus("No local match for: " .. Query, false)
+
+        local Empty = Create("TextLabel", {
+            Size = UDim2.new(1, 0, 0, 50),
+            BackgroundColor3 = Colors.Panel2,
             Font = Font,
-            Text = Content,
+            Text = "No match yet. Add this question to the AnswerDB table.",
             TextColor3 = Colors.Muted,
             TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Top,
             TextWrapped = true,
-            Parent = Body,
+            Parent = ResultsHolder,
+        }, {
+            Corner(10),
+            Stroke(Colors.Stroke, 1, 0.45),
+            Padding(12, 0, 12, 0),
         })
 
-        Card.Position = UDim2.new(0, 420, 0, 0)
-        Tween(Card, 0.22, { Position = UDim2.new(0, 0, 0, 0) })
-
-        task.delay(Duration, function()
-            if Card and Card.Parent then
-                Tween(Card, 0.18, {
-                    Position = UDim2.new(0, 420, 0, 0),
-                    BackgroundTransparency = 1,
-                })
-                task.wait(0.2)
-                if Card and Card.Parent then
-                    Card:Destroy()
-                end
-            end
-        end)
+        return
     end
 
-    function Rayfield:CreateWindow(Config)
-        Config = Config or {}
+    LastBestAnswer = Answers[1].Answer
 
-        local Window = {}
-        Window.Tabs = {}
-        Window.CurrentTab = nil
-
-        local Main = Create("Frame", {
-            Name = "Window",
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(0.5, 0, 0.5, 0),
-            Size = UDim2.new(0, 760, 0, 500),
-            BackgroundColor3 = Colors.Background,
-            ClipsDescendants = true,
-            Parent = ScreenGui,
-        }, {
-            Corner(16),
-            Stroke(Colors.Stroke, 1, 0.08),
-        })
-
-        local Topbar = Create("Frame", {
-            Name = "Topbar",
-            Size = UDim2.new(1, 0, 0, 58),
-            BackgroundColor3 = Colors.Panel,
-            BorderSizePixel = 0,
-            Parent = Main,
-        })
-
-        local TitleLabel = Create("TextLabel", {
-            Name = "Title",
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 18, 0, 8),
-            Size = UDim2.new(1, -112, 0, 24),
-            Font = BoldFont,
-            Text = tostring(Config.Name or "Window"),
-            TextColor3 = Colors.Text,
-            TextSize = 15,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            Parent = Topbar,
-        })
-
-        Create("TextLabel", {
-            Name = "Subtitle",
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 18, 0, 31),
-            Size = UDim2.new(1, -112, 0, 18),
-            Font = Font,
-            Text = tostring(Config.LoadingSubtitle or "Local UI"),
-            TextColor3 = Colors.Muted,
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            Parent = Topbar,
-        })
-
-        local MinimizeButton = Create("TextButton", {
-            Name = "Minimize",
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -54, 0, 14),
-            Size = UDim2.new(0, 30, 0, 30),
-            AutoButtonColor = false,
-            BackgroundColor3 = Colors.Panel2,
-            Font = BoldFont,
-            Text = "–",
-            TextColor3 = Colors.Text,
-            TextSize = 18,
-            Parent = Topbar,
-        }, {
-            Corner(8),
-            Stroke(Colors.Stroke, 1, 0.35),
-        })
-
-        local CloseButton = Create("TextButton", {
-            Name = "Close",
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -18, 0, 14),
-            Size = UDim2.new(0, 30, 0, 30),
-            AutoButtonColor = false,
-            BackgroundColor3 = Colors.Panel2,
-            Font = BoldFont,
-            Text = "×",
-            TextColor3 = Colors.Text,
-            TextSize = 18,
-            Parent = Topbar,
-        }, {
-            Corner(8),
-            Stroke(Colors.Stroke, 1, 0.35),
-        })
-
-        local Sidebar = Create("Frame", {
-            Name = "Sidebar",
-            Position = UDim2.new(0, 0, 0, 58),
-            Size = UDim2.new(0, 190, 1, -58),
-            BackgroundColor3 = Colors.Panel,
-            BorderSizePixel = 0,
-            Parent = Main,
-        }, {
-            Padding(12, 12, 12, 12),
-            ListLayout(8),
-        })
-
-        local Content = Create("Frame", {
-            Name = "Content",
-            Position = UDim2.new(0, 190, 0, 58),
-            Size = UDim2.new(1, -190, 1, -58),
-            BackgroundColor3 = Colors.Background,
-            BorderSizePixel = 0,
-            Parent = Main,
-        }, {
-            Padding(14, 14, 14, 14),
-        })
-
-        MakeDraggable(Topbar, Main)
-
-        local IsMinimized = false
-
-        MinimizeButton.MouseButton1Click:Connect(function()
-            IsMinimized = not IsMinimized
-            Sidebar.Visible = not IsMinimized
-            Content.Visible = not IsMinimized
-            Tween(Main, 0.2, {
-                Size = IsMinimized and UDim2.new(0, 760, 0, 58) or UDim2.new(0, 760, 0, 500),
-            })
-            MinimizeButton.Text = IsMinimized and "+" or "–"
-        end)
-
-        CloseButton.MouseButton1Click:Connect(function()
-            ScreenGui:Destroy()
-        end)
-
-        function Window:CreateTab(TabName, Icon)
-            local Tab = {}
-            Tab.Name = tostring(TabName or "Tab")
-
-            local TabButton = Create("TextButton", {
-                Name = "TabButton",
-                Size = UDim2.new(1, 0, 0, 38),
-                AutoButtonColor = false,
-                BackgroundColor3 = Colors.Panel2,
-                Font = SemiboldFont,
-                Text = Tab.Name,
-                TextColor3 = Colors.Muted,
-                TextSize = 13,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                Parent = Sidebar,
-            }, {
-                Corner(10),
-                Stroke(Colors.Stroke, 1, 0.55),
-                Padding(12, 0, 12, 0),
-            })
-
-            local TabPage = Create("ScrollingFrame", {
-                Name = Tab.Name,
-                Size = UDim2.new(1, 0, 1, 0),
-                CanvasSize = UDim2.new(0, 0, 0, 0),
-                AutomaticCanvasSize = Enum.AutomaticSize.Y,
-                BackgroundTransparency = 1,
-                BorderSizePixel = 0,
-                ScrollBarThickness = 4,
-                ScrollBarImageColor3 = Colors.Accent,
-                Visible = false,
-                Parent = Content,
-            }, {
-                Padding(2, 2, 8, 12),
-                ListLayout(10),
-            })
-
-            local function SelectTab()
-                for _, Other in ipairs(Window.Tabs) do
-                    Other.Page.Visible = false
-                    Tween(Other.Button, 0.12, {
-                        BackgroundColor3 = Colors.Panel2,
-                        TextColor3 = Colors.Muted,
-                    })
-                end
-
-                TabPage.Visible = true
-                Tween(TabButton, 0.12, {
-                    BackgroundColor3 = Colors.Accent,
-                    TextColor3 = Colors.Text,
-                })
-                Window.CurrentTab = Tab
-            end
-
-            TabButton.MouseButton1Click:Connect(SelectTab)
-
-            local function CreateCard(Height)
-                return Create("Frame", {
-                    Size = UDim2.new(1, 0, 0, Height or 68),
-                    AutomaticSize = Enum.AutomaticSize.Y,
-                    BackgroundColor3 = Colors.Panel,
-                    Parent = TabPage,
-                }, {
-                    Corner(12),
-                    Stroke(Colors.Stroke, 1, 0.42),
-                    Padding(14, 12, 14, 12),
-                })
-            end
-
-            function Tab:CreateParagraph(Config)
-                Config = Config or {}
-
-                local Card = CreateCard(70)
-                local Stack = Create("Frame", {
-                    BackgroundTransparency = 1,
-                    Size = UDim2.new(1, 0, 0, 0),
-                    AutomaticSize = Enum.AutomaticSize.Y,
-                    Parent = Card,
-                }, {
-                    ListLayout(4),
-                })
-
-                Create("TextLabel", {
-                    BackgroundTransparency = 1,
-                    Size = UDim2.new(1, 0, 0, 19),
-                    Font = SemiboldFont,
-                    Text = tostring(Config.Title or "Paragraph"),
-                    TextColor3 = Colors.Text,
-                    TextSize = 14,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    TextWrapped = true,
-                    Parent = Stack,
-                })
-
-                Create("TextLabel", {
-                    BackgroundTransparency = 1,
-                    Size = UDim2.new(1, 0, 0, 0),
-                    AutomaticSize = Enum.AutomaticSize.Y,
-                    Font = Font,
-                    Text = tostring(Config.Content or ""),
-                    TextColor3 = Colors.Muted,
-                    TextSize = 13,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    TextWrapped = true,
-                    Parent = Stack,
-                })
-
-                return Card
-            end
-
-            function Tab:CreateInput(Config)
-                Config = Config or {}
-
-                local Card = CreateCard(92)
-                local NameLabel = Create("TextLabel", {
-                    BackgroundTransparency = 1,
-                    Position = UDim2.new(0, 0, 0, 0),
-                    Size = UDim2.new(1, 0, 0, 20),
-                    Font = SemiboldFont,
-                    Text = tostring(Config.Name or "Input"),
-                    TextColor3 = Colors.Text,
-                    TextSize = 14,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    Parent = Card,
-                })
-
-                local Box = Create("TextBox", {
-                    BackgroundColor3 = Colors.Panel2,
-                    Position = UDim2.new(0, 0, 0, 34),
-                    Size = UDim2.new(1, 0, 0, 38),
-                    ClearTextOnFocus = false,
-                    Font = Font,
-                    PlaceholderText = tostring(Config.PlaceholderText or "Type here..."),
-                    PlaceholderColor3 = Colors.DarkText,
-                    Text = "",
-                    TextColor3 = Colors.Text,
-                    TextSize = 13,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    Parent = Card,
-                }, {
-                    Corner(10),
-                    Stroke(Colors.Stroke, 1, 0.45),
-                    Padding(12, 0, 12, 0),
-                })
-
-                Box.Focused:Connect(function()
-                    Tween(Box, 0.12, { BackgroundColor3 = Colors.Panel3 })
-                end)
-
-                Box.FocusLost:Connect(function(EnterPressed)
-                    Tween(Box, 0.12, { BackgroundColor3 = Colors.Panel2 })
-
-                    if EnterPressed then
-                        local Text = Box.Text
-
-                        if type(Config.Callback) == "function" then
-                            task.spawn(Config.Callback, Text)
-                        end
-
-                        if Config.RemoveTextAfterFocusLost then
-                            Box.Text = ""
-                        end
-                    end
-                end)
-
-                return Box
-            end
-
-            function Tab:CreateToggle(Config)
-                Config = Config or {}
-
-                local Value = Config.CurrentValue == true
-                local Card = CreateCard(58)
-
-                local Label = Create("TextLabel", {
-                    BackgroundTransparency = 1,
-                    Position = UDim2.new(0, 0, 0, 0),
-                    Size = UDim2.new(1, -76, 0, 34),
-                    Font = SemiboldFont,
-                    Text = tostring(Config.Name or "Toggle"),
-                    TextColor3 = Colors.Text,
-                    TextSize = 14,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    TextYAlignment = Enum.TextYAlignment.Center,
-                    Parent = Card,
-                })
-
-                local Switch = Create("TextButton", {
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.new(0, 56, 0, 30),
-                    AutoButtonColor = false,
-                    BackgroundColor3 = Value and Colors.Accent or Colors.Panel2,
-                    Text = "",
-                    Parent = Card,
-                }, {
-                    Corner(999),
-                    Stroke(Colors.Stroke, 1, 0.45),
-                })
-
-                local Knob = Create("Frame", {
-                    Position = Value and UDim2.new(1, -27, 0.5, -11) or UDim2.new(0, 5, 0.5, -11),
-                    Size = UDim2.new(0, 22, 0, 22),
-                    BackgroundColor3 = Colors.Text,
-                    Parent = Switch,
-                }, {
-                    Corner(999),
-                })
-
-                local function Set(NewValue, FireCallback)
-                    Value = NewValue == true
-
-                    Tween(Switch, 0.15, {
-                        BackgroundColor3 = Value and Colors.Accent or Colors.Panel2,
-                    })
-
-                    Tween(Knob, 0.15, {
-                        Position = Value and UDim2.new(1, -27, 0.5, -11) or UDim2.new(0, 5, 0.5, -11),
-                    })
-
-                    if FireCallback and type(Config.Callback) == "function" then
-                        task.spawn(Config.Callback, Value)
-                    end
-                end
-
-                Switch.MouseButton1Click:Connect(function()
-                    Set(not Value, true)
-                end)
-
-                Card.InputBegan:Connect(function(Input)
-                    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                        Set(not Value, true)
-                    end
-                end)
-
-                local ToggleObject = {}
-
-                function ToggleObject:Set(NewValue)
-                    Set(NewValue, true)
-                end
-
-                function ToggleObject:Get()
-                    return Value
-                end
-
-                return ToggleObject
-            end
-
-            Tab.Button = TabButton
-            Tab.Page = TabPage
-            table.insert(Window.Tabs, Tab)
-
-            if not Window.CurrentTab then
-                SelectTab()
-            end
-
-            return Tab
+    for Index, Result in ipairs(Answers) do
+        if Index > 12 then
+            break
         end
 
-        if Config.LoadingTitle then
-            Rayfield:Notify({
-                Title = tostring(Config.LoadingTitle),
-                Content = tostring(Config.LoadingSubtitle or ""),
-                Duration = 2,
-            })
-        end
-
-        return Window
+        AddAnswerButton(Index, Result)
     end
 
-    return Rayfield
+    SetStatus("Best: " .. LastBestAnswer .. " | Matches: " .. tostring(#Answers), true)
 end
+
+local function DetectAndRender()
+    local Question = DetectQuestionFromScreen()
+
+    if Question and Question ~= "" then
+        RenderAnswers(Question)
+    else
+        SetStatus("Could not detect a question on screen.", false)
+    end
+end
+
+--// Main page
+do
+    local Intro = Card(MainPage, 80)
+
+    Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 22),
+        Font = SemiboldFont,
+        Text = "Answer Suggestions",
+        TextColor3 = Colors.Text,
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Intro,
+    })
+
+    StatusLabel = Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 28),
+        Size = UDim2.new(1, 0, 0, 38),
+        Font = Font,
+        Text = "Loaded. Waiting for question...",
+        TextColor3 = Colors.Muted,
+        TextSize = 13,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Parent = Intro,
+    })
+
+    local InputCard = Card(MainPage, 118)
+
+    Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 20),
+        Font = SemiboldFont,
+        Text = "Question Search",
+        TextColor3 = Colors.Text,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = InputCard,
+    })
+
+    QuestionBox = Create("TextBox", {
+        BackgroundColor3 = Colors.Panel2,
+        Position = UDim2.new(0, 0, 0, 32),
+        Size = UDim2.new(1, 0, 0, 38),
+        ClearTextOnFocus = false,
+        Font = Font,
+        PlaceholderText = "Type or paste the question...",
+        PlaceholderColor3 = Color3.fromRGB(95, 102, 128),
+        Text = "",
+        TextColor3 = Colors.Text,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = InputCard,
+    }, {
+        Corner(10),
+        Stroke(Colors.Stroke, 1, 0.45),
+        Padding(12, 0, 12, 0),
+    })
+
+    local DetectButton = Create("TextButton", {
+        BackgroundColor3 = Colors.Accent,
+        Position = UDim2.new(0, 0, 0, 78),
+        Size = UDim2.new(0.33, -6, 0, 30),
+        Font = SemiboldFont,
+        Text = "Detect",
+        TextColor3 = Colors.Text,
+        TextSize = 12,
+        Parent = InputCard,
+    }, {
+        Corner(9),
+    })
+
+    local SearchButton = Create("TextButton", {
+        BackgroundColor3 = Colors.Panel3,
+        Position = UDim2.new(0.33, 3, 0, 78),
+        Size = UDim2.new(0.34, -6, 0, 30),
+        Font = SemiboldFont,
+        Text = "Search",
+        TextColor3 = Colors.Text,
+        TextSize = 12,
+        Parent = InputCard,
+    }, {
+        Corner(9),
+    })
+
+    local CopyButton = Create("TextButton", {
+        BackgroundColor3 = Colors.Panel3,
+        Position = UDim2.new(0.67, 3, 0, 78),
+        Size = UDim2.new(0.33, -3, 0, 30),
+        Font = SemiboldFont,
+        Text = "Copy Best",
+        TextColor3 = Colors.Text,
+        TextSize = 12,
+        Parent = InputCard,
+    }, {
+        Corner(9),
+    })
+
+    DetectButton.MouseButton1Click:Connect(DetectAndRender)
+
+    SearchButton.MouseButton1Click:Connect(function()
+        RenderAnswers(QuestionBox.Text)
+    end)
+
+    CopyButton.MouseButton1Click:Connect(function()
+        if LastBestAnswer == "" then
+            SetStatus("No best answer to copy yet.", false)
+            return
+        end
+
+        if SafeCopy(LastBestAnswer) then
+            SetStatus("Copied best answer: " .. LastBestAnswer, true)
+        else
+            SetStatus("Clipboard unsupported. Best answer: " .. LastBestAnswer, false)
+        end
+    end)
+
+    QuestionBox.FocusLost:Connect(function(EnterPressed)
+        if EnterPressed then
+            RenderAnswers(QuestionBox.Text)
+        end
+    end)
+
+    local ResultsCard = Card(MainPage, 250)
+
+    Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 20),
+        Font = SemiboldFont,
+        Text = "Suggested Answers",
+        TextColor3 = Colors.Text,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = ResultsCard,
+    })
+
+    ResultsHolder = Create("ScrollingFrame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 30),
+        Size = UDim2.new(1, 0, 0, 205),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = Colors.Accent,
+        Parent = ResultsCard,
+    }, {
+        List(8),
+    })
+
+    local OptionsCard = Card(MainPage, 60)
+
+    AutoToggleButton = Create("TextButton", {
+        BackgroundColor3 = AutoDetect and Colors.Accent or Colors.Panel2,
+        Size = UDim2.new(1, 0, 0, 36),
+        Font = SemiboldFont,
+        Text = AutoDetect and "Auto Detect: ON" or "Auto Detect: OFF",
+        TextColor3 = Colors.Text,
+        TextSize = 13,
+        Parent = OptionsCard,
+    }, {
+        Corner(10),
+        Stroke(Colors.Stroke, 1, 0.45),
+    })
+
+    AutoToggleButton.MouseButton1Click:Connect(function()
+        AutoDetect = not AutoDetect
+        AutoToggleButton.Text = AutoDetect and "Auto Detect: ON" or "Auto Detect: OFF"
+
+        Tween(AutoToggleButton, 0.12, {
+            BackgroundColor3 = AutoDetect and Colors.Accent or Colors.Panel2,
+        })
+
+        SetStatus("Auto Detect " .. (AutoDetect and "enabled." or "disabled."), AutoDetect)
+    end)
+end
+
+--// Help page
+do
+    local Help = Card(HelpPage, 260)
+
+    Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 24),
+        Font = SemiboldFont,
+        Text = "How this works",
+        TextColor3 = Colors.Text,
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Help,
+    })
+
+    Create("TextLabel", {
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 34),
+        Size = UDim2.new(1, 0, 0, 190),
+        Font = Font,
+        Text = "This is a full local script, not just the MiniRayfield shim.\n\n- Detect scans visible UI text for likely Type Or Die questions.\n- Search lets you manually type the question.\n- Clicking an answer copies it if setclipboard is supported.\n- It does not auto-submit or call any game remotes.\n\nTo add more answers, add another AddQuestion({...}, {...}) block near the top.",
+        TextColor3 = Colors.Muted,
+        TextSize = 13,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Parent = Help,
+    })
+end
+
+SelectPage(AllPages[1])
+
+--// Auto detect loop
+task.spawn(function()
+    task.wait(0.5)
+
+    DetectAndRender()
+
+    while ScreenGui and ScreenGui.Parent do
+        task.wait(1.0)
+
+        if AutoDetect then
+            local Question = DetectQuestionFromScreen()
+            if Question and Question ~= "" and Normalize(Question) ~= Normalize(LastDetectedQuestion) then
+                RenderAnswers(Question)
+            end
+        end
+    end
+end)
+
+SetStatus("Loaded. UI is now active.", true)
