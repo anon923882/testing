@@ -1,31 +1,27 @@
 --[[
   Recovered and simplified script based on repo salvage.
-  Notes:
-  - Keeps safe pieces: game load wait, teleport queue, folder/config bootstrap, version warning.
-  - Removes decompiler artifacts and broken VM register code.
+  Focus pass: provide a minimal usable AutoFarm loop for in-dungeon testing.
 ]]
 
 local SCRIPT_NAME = "Nihility Hub - Dungeon Quest"
-local SCRIPT_VERSION = "1.2.0"
+local SCRIPT_VERSION = "1.3.0"
 local GUI_URL = "https://raw.githubusercontent.com/ValorantIsKewl/RBX/refs/heads/main/GUI.lua"
 local TELEPORT_LOADER = "loadstring(game:HttpGet('https://raw.githubusercontent.com/ValorantIsKewl/Nihility-Hub/refs/heads/main/Loader.lua'))()"
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 
 local function waitForGameLoaded()
-  while not game:IsLoaded() do
-    task.wait()
-  end
+  while not game:IsLoaded() do task.wait() end
 end
 
 local function safeQueueOnTeleport(code)
-  local qot = rawget(getfenv(), "queue_on_teleport")
-  if type(qot) == "function" then
-    qot(code)
-  end
+  local env = getfenv and getfenv() or _G
+  local qot = env and rawget(env, "queue_on_teleport")
+  if type(qot) == "function" then qot(code) end
 end
 
 local function ensureDir(path)
@@ -34,69 +30,28 @@ local function ensureDir(path)
   end
 end
 
-local function ensureFile(path, contents)
-  if type(isfile) == "function" and type(writefile) == "function" and not isfile(path) then
-    writefile(path, contents)
-  end
-end
-
 local function readConfig(path)
-  if type(isfile) ~= "function" or type(readfile) ~= "function" then
-    return nil
-  end
-
-  if not isfile(path) then
-    return nil
-  end
-
+  if type(isfile) ~= "function" or type(readfile) ~= "function" or not isfile(path) then return nil end
   local ok, raw = pcall(readfile, path)
-  if not ok then
-    warn(string.format("%s: failed reading config at %s", SCRIPT_NAME, path))
-    return nil
-  end
-
+  if not ok then return nil end
   local decodeOk, data = pcall(HttpService.JSONDecode, HttpService, raw)
-  if decodeOk and type(data) == "table" then
-    return data
-  end
-
-  warn(string.format("%s: invalid config JSON at %s, using defaults", SCRIPT_NAME, path))
-  return nil
+  return (decodeOk and type(data) == "table") and data or nil
 end
 
 local function writeConfig(path, data)
-  if type(writefile) ~= "function" then
-    return
-  end
+  if type(writefile) ~= "function" then return end
   local ok, encoded = pcall(HttpService.JSONEncode, HttpService, data)
-  if ok then
-    writefile(path, encoded)
-  end
+  if ok then writefile(path, encoded) end
 end
 
 local function loadGui(url)
-  local okHttp, src = pcall(function()
-    return game:HttpGet(url)
-  end)
-  if not okHttp then
-    error(string.format("%s: HttpGet failed for GUI (%s)", SCRIPT_NAME, tostring(src)))
-  end
-
+  local okHttp, src = pcall(function() return game:HttpGet(url) end)
+  if not okHttp then return nil, nil, src end
   local okLoad, chunk = pcall(loadstring, src)
-  if not okLoad or type(chunk) ~= "function" then
-    error(string.format("%s: loadstring failed for GUI chunk", SCRIPT_NAME))
-  end
-
+  if not okLoad or type(chunk) ~= "function" then return nil, nil, "loadstring failed" end
   local okRun, guiFactory, remoteVersion = pcall(chunk)
-  if not okRun then
-    error(string.format("%s: GUI chunk runtime error: %s", SCRIPT_NAME, tostring(guiFactory)))
-  end
-
-  if remoteVersion and remoteVersion ~= "1.0.0" then
-    warn(string.format("%s: Outdated/changed GUI version reported (%s)", SCRIPT_NAME, tostring(remoteVersion)))
-  end
-
-  return guiFactory, remoteVersion
+  if not okRun then return nil, nil, guiFactory end
+  return guiFactory, remoteVersion, nil
 end
 
 local function defaultConfig()
@@ -104,16 +59,111 @@ local function defaultConfig()
     Name = "Default",
     Version = SCRIPT_VERSION,
     Settings = {
-      AutoFarm = false,
-      Killaura = false,
-      AutoSell = false,
-      AutoRetry = false,
-      SkipCutscene = false,
-      AutoBonusBoss = false,
-      AutoJoin = false,
-      AutoCarry = false,
+      AutoFarm = true,
+      FarmTweenSpeed = 180,
+      FarmYOffset = 7,
+      AttackDistance = 16,
+      RepathDistance = 55,
     }
   }
+end
+
+local function getCharacter()
+  return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function getRoot(char)
+  return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function isAlive(model)
+  local hum = model and model:FindFirstChildOfClass("Humanoid")
+  return hum and hum.Health > 0
+end
+
+local function findMobContainer()
+  local candidates = {
+    workspace:FindFirstChild("Mobs"),
+    workspace:FindFirstChild("Enemies"),
+    workspace:FindFirstChild("EnemyFolder"),
+    workspace:FindFirstChild("MonsterFolder"),
+    workspace:FindFirstChild("MobFolder"),
+    workspace:FindFirstChild("Live"),
+  }
+  for _, c in ipairs(candidates) do
+    if c and c:IsA("Folder") then return c end
+  end
+  return workspace
+end
+
+local function findNearestMob(fromPos)
+  local folder = findMobContainer()
+  local nearest, nearestDist
+  for _, obj in ipairs(folder:GetDescendants()) do
+    if obj:IsA("Model") and obj ~= LocalPlayer.Character and isAlive(obj) then
+      local hrp = obj:FindFirstChild("HumanoidRootPart")
+      if hrp then
+        local dist = (hrp.Position - fromPos).Magnitude
+        if not nearestDist or dist < nearestDist then
+          nearest, nearestDist = obj, dist
+        end
+      end
+    end
+  end
+  return nearest, nearestDist
+end
+
+local function invokeAttack(target)
+  local rs = game:GetService("ReplicatedStorage")
+  local remotes = {
+    rs:FindFirstChild("remotes") and rs.remotes:FindFirstChild("swing"),
+    rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("Attack"),
+    rs:FindFirstChild("Events") and rs.Events:FindFirstChild("Attack"),
+    rs:FindFirstChild("AttackRemote"),
+  }
+
+  for _, r in ipairs(remotes) do
+    if typeof(r) == "Instance" then
+      pcall(function()
+        if r:IsA("RemoteEvent") then
+          r:FireServer(target)
+        elseif r:IsA("RemoteFunction") then
+          r:InvokeServer(target)
+        end
+      end)
+      return true
+    end
+  end
+
+  -- fallback: click tool swing if present
+  local tool = getCharacter():FindFirstChildOfClass("Tool")
+  if tool then pcall(function() tool:Activate() end) return true end
+  return false
+end
+
+local function runAutoFarm(settings)
+  task.spawn(function()
+    while settings.AutoFarm do
+      local char = getCharacter()
+      local root = getRoot(char)
+      if not root then task.wait(0.2) continue end
+
+      local mob, dist = findNearestMob(root.Position)
+      if mob and mob:FindFirstChild("HumanoidRootPart") and isAlive(mob) then
+        local mobRoot = mob.HumanoidRootPart
+        local targetPos = mobRoot.Position + Vector3.new(0, settings.FarmYOffset, 0)
+
+        if dist and dist > settings.AttackDistance then
+          char:PivotTo(CFrame.new(targetPos))
+        end
+
+        invokeAttack(mob)
+        task.wait(0.08)
+      else
+        task.wait(0.25)
+      end
+    end
+  end)
 end
 
 waitForGameLoaded()
@@ -123,39 +173,22 @@ local root = "Nihility Hub"
 local gameRoot = root .. "/Dungeon Quest"
 local userRoot = string.format("%s/%s", gameRoot, tostring(LocalPlayer.UserId))
 local configPath = userRoot .. "/Config.json"
+ensureDir(root); ensureDir(gameRoot); ensureDir(userRoot)
 
-ensureDir(root)
-ensureDir(gameRoot)
-ensureDir(userRoot)
+local config = readConfig(configPath) or defaultConfig()
+config.Version = SCRIPT_VERSION
+config.Settings = config.Settings or defaultConfig().Settings
+writeConfig(configPath, config)
 
-local config = readConfig(configPath)
-if not config then
-  config = defaultConfig()
-  writeConfig(configPath, config)
-else
-  config.Version = config.Version or SCRIPT_VERSION
-  config.Name = config.Name or "Default"
-  config.Settings = config.Settings or defaultConfig().Settings
-end
+print(SCRIPT_NAME .. " v" .. SCRIPT_VERSION)
+print("AutoFarm:", config.Settings.AutoFarm and "ON" or "OFF")
 
-print(SCRIPT_NAME)
-local guiFactory = nil
-local guiVersion = nil
+local guiFactory, guiVersion, guiError = loadGui(GUI_URL)
+if guiError then warn(SCRIPT_NAME .. ": GUI load failed: " .. tostring(guiError)) end
+if type(guiFactory) == "function" then pcall(guiFactory) end
+if guiVersion and guiVersion ~= "1.0.0" then warn(SCRIPT_NAME .. ": GUI version " .. tostring(guiVersion)) end
 
-local ok, resultFactory, resultVersion = pcall(loadGui, GUI_URL)
-if ok then
-  guiFactory = resultFactory
-  guiVersion = resultVersion
-else
-  warn(resultFactory)
-end
-
-if type(guiFactory) == "function" then
-  local okGui, guiError = pcall(guiFactory)
-  if not okGui then
-    warn(string.format("%s: failed to initialize GUI factory: %s", SCRIPT_NAME, tostring(guiError)))
-  end
-end
+runAutoFarm(config.Settings)
 
 return {
   Name = SCRIPT_NAME,
