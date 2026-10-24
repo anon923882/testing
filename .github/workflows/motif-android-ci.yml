@@ -56,8 +56,18 @@ jobs:
       - name: Validate source
         working-directory: motif
         run: |
-          python -m unittest discover -s tests -v
+          python -m unittest discover -s tests -p test_spotify_offline.py -v
           node --check app/src/main/assets/app.js
+      - name: Android Java unit tests
+        working-directory: motif
+        run: gradle :app:testDebugUnitTest --stacktrace --no-daemon
+      - name: Install browser test runtime
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Run UI stress tests
+        working-directory: motif
+        run: python tests/test_ui_end_to_end.py
       - name: Compile APK
         working-directory: motif
         run: gradle :app:assembleDebug --stacktrace --no-daemon
