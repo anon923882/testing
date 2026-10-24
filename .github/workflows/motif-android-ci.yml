@@ -50,7 +50,7 @@ jobs:
             install 'pyogg==0.5.11a1'
             install 'requests>=2.32.3'
             install 'websocket-client>=1.8.0'
-            install 'zeroconf>=0.146.4'""")
+            install 'zeroconf==0.39.4'""")
           f.write_text(s)
           PY
       - name: Validate source
