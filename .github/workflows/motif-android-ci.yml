@@ -41,6 +41,24 @@ jobs:
         run: |
           python -m unittest discover -s tests -v
           node --check app/src/main/assets/app.js
+      - name: Test Android Python wheel availability (experimental)
+        working-directory: motif
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/build.gradle')
+          s=p.read_text()
+          s=s.replace("install 'librespot==0.0.10'", """options '--no-deps'
+            install 'librespot==0.0.10'
+            install 'pycryptodomex==3.21.0'
+            install 'defusedxml==0.7.1'
+            install 'protobuf==3.20.1'
+            install 'pyogg==0.6.14a.1'
+            install 'requests==2.32.3'
+            install 'websocket-client==1.8.0'
+            install 'zeroconf==0.146.4'""")
+          p.write_text(s)
+          PY
       - name: Compile APK
         working-directory: motif
         run: gradle :app:assembleDebug --stacktrace --no-daemon
