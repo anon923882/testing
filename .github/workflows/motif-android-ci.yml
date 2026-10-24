@@ -50,7 +50,12 @@ jobs:
             install 'pyogg==0.5.11a1'
             install 'requests>=2.32.3'
             install 'websocket-client>=1.8.0'
-            install 'zeroconf==0.39.4'""")
+            install 'zeroconf==0.39.4'
+            install 'urllib3==2.2.3'
+            install 'idna==3.10'
+            install 'certifi==2025.1.31'
+            install 'charset-normalizer==3.4.0'
+            install 'ifaddr==0.2.0'""")
           f.write_text(s)
           PY
       - name: Validate source
@@ -71,6 +76,25 @@ jobs:
       - name: Compile APK
         working-directory: motif
         run: gradle :app:assembleDebug --stacktrace --no-daemon
+      - name: Verify packaged Python dependencies
+        working-directory: motif
+        run: |
+          python - <<'PY'
+          import io,zipfile,glob
+          apk=zipfile.ZipFile(glob.glob("app/build/outputs/apk/debug/*.apk")[0])
+          py=zipfile.ZipFile(io.BytesIO(apk.read("assets/chaquopy/requirements-common.imy")))
+          paths=py.namelist()
+          needed=["urllib3/","idna/","certifi/","charset_normalizer/","requests/","librespot/","zeroconf/","ifaddr/","pyogg/","Cryptodome/"]
+          missing=[n for n in needed if not any(x.startswith(n) for x in paths)]
+          print("Packaged Python modules:",", ".join(needed))
+          assert not missing,"Missing Python dependencies: "+", ".join(missing)
+          PY
+      - name: Upload Android signing utility
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motif-QA-apksigner-tool
+          path: ${{ env.ANDROID_HOME }}/build-tools/35.0.0/lib/apksigner.jar
+          if-no-files-found: error
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
