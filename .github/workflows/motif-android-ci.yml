@@ -1,0 +1,48 @@
+name: Motif Android Spotify APK
+on:
+  pull_request:
+    paths:
+      - "motif-source.zip"
+      - ".github/workflows/motif-android-ci.yml"
+  push:
+    branches:
+      - "motif/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Unpack Motif
+        run: |
+          mkdir -p motif
+          unzip -q motif-source.zip -d motif
+      - name: Validate source
+        working-directory: motif
+        run: |
+          python -m unittest discover -s tests -v
+          node --check app/src/main/assets/app.js
+      - name: Compile APK
+        working-directory: motif
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motif-Spotify-debug-apk
+          path: motif/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
