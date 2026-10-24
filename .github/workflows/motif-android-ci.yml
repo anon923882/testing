@@ -36,6 +36,23 @@ jobs:
         run: |
           mkdir -p motif
           unzip -q motif-source.zip -d motif
+      - name: Probe Android Python dependency compatibility
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          f = Path("motif/app/build.gradle")
+          s = f.read_text()
+          s = s.replace("install 'librespot==0.0.10'","""options('--no-deps')
+            install 'librespot==0.0.10'
+            install 'pycryptodomex==3.21.0'
+            install 'protobuf==3.20.1'
+            install 'defusedxml>=0.7.1'
+            install 'pyogg>=0.6.14a.1'
+            install 'requests>=2.32.3'
+            install 'websocket-client>=1.8.0'
+            install 'zeroconf>=0.146.4'""")
+          f.write_text(s)
+          PY
       - name: Validate source
         working-directory: motif
         run: |
