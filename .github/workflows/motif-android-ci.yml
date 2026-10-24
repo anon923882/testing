@@ -32,6 +32,8 @@ jobs:
         run: |
           mkdir -p motif
           unzip -q motif-source.zip -d motif
+      - name: Install Python test dependency
+        run: python -m pip install --quiet requests==2.32.3
       - name: Spotify Python unit tests
         working-directory: motif
         run: |
