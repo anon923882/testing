@@ -70,7 +70,7 @@ jobs:
             install 'pycryptodomex==3.21.0'
             install 'defusedxml==0.7.1'
             install 'protobuf==3.20.1'
-            install 'pyogg==0.6.14a.1'
+            install 'pyogg==0.5.11a1'
             install 'requests==2.32.3'
             install 'websocket-client==1.8.0'
             install 'zeroconf==0.146.4'""")
