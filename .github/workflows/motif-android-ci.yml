@@ -1,0 +1,94 @@
+name: Motif QA Android Build
+on:
+  push:
+    branches: ['motif/**']
+  pull_request:
+    paths: ['motif-source.zip', '.github/workflows/motif-android-ci.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK
+        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Unpack project
+        run: |
+          mkdir -p motif
+          unzip -q motif-source.zip -d motif
+      - name: Install Python test dependency
+        run: python -m pip install --quiet requests==2.32.3
+      - name: Spotify Python unit tests
+        working-directory: motif
+        run: |
+          python -m unittest discover -s tests -p 'test_spotify_offline.py' -v
+          python -m unittest discover -s tests -p 'test_transfer_recovery.py' -v
+          node --check app/src/main/assets/app.js
+      - name: Python 3.11 Spotify engine import smoke test
+        working-directory: motif
+        run: |
+          python -m pip install --no-deps librespot==0.0.10 requests==2.32.3 urllib3==2.2.3 idna==3.10 certifi==2025.1.31 charset-normalizer==3.4.0 protobuf==3.20.1 pycryptodomex==3.21.0 defusedxml==0.7.1 websocket-client==1.8.0 zeroconf==0.39.4 ifaddr==0.2.0 async-timeout==4.0.3
+          PYTHONPATH=app/src/main/python python - <<'PY'
+          import sys
+          import motif_spotify
+          assert motif_spotify.dependency_check()
+          assert 'pyogg' not in sys.modules
+          from librespot.core import Session
+          from librespot.audio.decoders import AudioQuality
+          assert AudioQuality.VERY_HIGH is not None
+          print('Real Spotify module imports succeeded on Python 3.11; PyOgg was not imported')
+          PY
+      - name: Android Java unit tests
+        working-directory: motif
+        run: gradle :app:testDebugUnitTest --stacktrace --no-daemon
+      - name: Install browser and run mobile UI regressions
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          cd motif
+          python tests/test_ui_end_to_end.py
+      - name: Compile ARM64 QA APK
+        working-directory: motif
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+      - name: Verify bundled Spotify Python dependencies
+        working-directory: motif
+        run: |
+          python - <<'PY'
+          import glob,io,zipfile
+          apks=glob.glob('app/build/outputs/apk/debug/*.apk')
+          assert len(apks)==1,apks
+          apk=zipfile.ZipFile(apks[0])
+          assert apk.testzip() is None
+          pymod=zipfile.ZipFile(io.BytesIO(apk.read('assets/chaquopy/requirements-common.imy')))
+          assert pymod.testzip() is None
+          mods=pymod.namelist()
+          required=['urllib3/','idna/','certifi/','charset_normalizer/','requests/','librespot/','zeroconf/','async_timeout/','ifaddr/','Cryptodome/']
+          missing=[r for r in required if not any(p.startswith(r) for p in mods)]
+          print('Missing packages:',missing)
+          assert not missing,missing
+          assert not any(p.startswith('pyogg/') for p in mods), 'Unused PyOgg accidentally bundled'
+          assert not any(b'pyogg' in pymod.read(p).lower() for p in mods if p.startswith('librespot/') and p.endswith('.pyc')), 'librespot unexpectedly imports PyOgg'
+          print('No PyOgg packaged; all direct-stream imports present')
+          PY
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Motif-v1.4.6-QA-APK
+          path: motif/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
